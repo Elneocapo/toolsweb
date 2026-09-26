@@ -1,31 +1,60 @@
-const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),amount=document.getElementById("amount"),size=document.getElementById("size"),amountValue=document.getElementById("amountValue"),sizeValue=document.getElementById("sizeValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
+const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),size=document.getElementById("size"),threshold=document.getElementById("threshold"),method=document.getElementById("method"),sizeValue=document.getElementById("sizeValue"),thresholdValue=document.getElementById("thresholdValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
 let image=null,url=null;
 const bayer4=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
-const bayer8=[
-[0,48,12,60,3,51,15,63],[32,16,44,28,35,19,47,31],[8,56,4,52,11,59,7,55],[40,24,36,20,43,27,39,23],
-[2,50,14,62,1,49,13,61],[34,18,46,30,33,17,45,29],[10,58,6,54,9,57,5,53],[42,26,38,22,41,25,37,21]
-];
-function getMatrix(n){return n===2?[[0,2],[3,1]]:n===8?bayer8:bayer4}
+function luminance(r,g,b){return r*.2126+g*.7152+b*.0722}
+function processBayer(data,w,h,cell,cut){
+  const out=new Uint8ClampedArray(data.length);
+  for(let gy=0;gy<h;gy+=cell)for(let gx=0;gx<w;gx+=cell){
+    let sum=0,count=0;
+    for(let y=gy;y<Math.min(gy+cell,h);y++)for(let x=gx;x<Math.min(gx+cell,w);x++){const i=(y*w+x)*4;sum+=luminance(data[i],data[i+1],data[i+2]);count++}
+    const lum=sum/count;
+    for(let y=gy;y<Math.min(gy+cell,h);y++)for(let x=gx;x<Math.min(gx+cell,w);x++){
+      const i=(y*w+x)*4, t=((bayer4[y%4][x%4]+.5)/16)*255;
+      const v=lum>=cut+(t-127.5)*.72?255:0;
+      out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3];
+    }
+  }
+  return out;
+}
+function processError(data,w,h,cell,cut,type){
+  const sw=Math.ceil(w/cell),sh=Math.ceil(h/cell),gray=new Float32Array(sw*sh);
+  for(let by=0;by<sh;by++)for(let bx=0;bx<sw;bx++){
+    let sum=0,count=0;
+    for(let y=by*cell;y<Math.min((by+1)*cell,h);y++)for(let x=bx*cell;x<Math.min((bx+1)*cell,w);x++){const i=(y*w+x)*4;sum+=luminance(data[i],data[i+1],data[i+2]);count++}
+    gray[by*sw+bx]=sum/count;
+  }
+  const out=new Uint8ClampedArray(data.length),kernels=type==="atkinson"?[[1,0,1/8],[2,0,1/8],[-1,1,1/8],[0,1,1/8],[1,1,1/8],[0,2,1/8]]:[[1,0,7/16],[-1,1,3/16],[0,1,5/16],[1,1,1/16]];
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){
+    const p=y*sw+x,old=gray[p],v=old>=cut?255:0,err=old-v;gray[p]=v;
+    for(const [dx,dy,k] of kernels){const nx=x+dx,ny=y+dy;if(nx>=0&&nx<sw&&ny>=0&&ny<sh)gray[ny*sw+nx]+=err*k}
+  }
+  for(let by=0;by<sh;by++)for(let bx=0;bx<sw;bx++){const v=gray[by*sw+bx]>=128?255:0;for(let y=by*cell;y<Math.min((by+1)*cell,h);y++)for(let x=bx*cell;x<Math.min((bx+1)*cell,w);x++){const i=(y*w+x)*4;out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3]}}
+  return out;
+}
+function processNone(data,w,h,cell,cut){
+  const out=new Uint8ClampedArray(data.length);
+  for(let by=0;by<h;by+=cell)for(let bx=0;bx<w;bx+=cell){
+    let sum=0,count=0;
+    for(let y=by;y<Math.min(by+cell,h);y++)for(let x=bx;x<Math.min(bx+cell,w);x++){const i=(y*w+x)*4;sum+=luminance(data[i],data[i+1],data[i+2]);count++}
+    const v=sum/count>=cut?255:0;
+    for(let y=by;y<Math.min(by+cell,h);y++)for(let x=bx;x<Math.min(bx+cell,w);x++){const i=(y*w+x)*4;out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3]}
+  }
+  return out;
+}
 function render(){
  if(!image)return;
  const max=1400,w=Math.min(image.naturalWidth,max),h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
  canvas.width=w;canvas.height=h;ctx.drawImage(image,0,0,w,h);
- const src=ctx.getImageData(0,0,w,h),out=new ImageData(w,h),a=src.data,o=out.data;
- const strength=+amount.value/100,n=+size.value,m=getMatrix(n),levels=2;
- for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-  const i=(y*w+x)*4;
-  const lum=(a[i]*.2126+a[i+1]*.7152+a[i+2]*.0722)/255;
-  const threshold=(m[y%n][x%n]+.5)/(n*n);
-  const dithered=lum>=threshold?255:0;
-  for(let c=0;c<3;c++)o[i+c]=Math.round(a[i+c]*(1-strength)+dithered*strength);
-  o[i+3]=a[i+3];
- }
- ctx.putImageData(out,0,0);
- amountValue.textContent=amount.value+"%";sizeValue.textContent=n+"×"+n;
- placeholder.hidden=true;canvas.hidden=false;download.disabled=false;reset.disabled=false;
+ const src=ctx.getImageData(0,0,w,h),cut=+threshold.value*2.55,cell=+size.value;
+ let out;
+ if(method.value==="bayer")out=processBayer(src.data,w,h,cell,cut);
+ else if(method.value==="floyd"||method.value==="atkinson")out=processError(src.data,w,h,cell,cut,method.value);
+ else out=processNone(src.data,w,h,cell,cut);
+ ctx.putImageData(new ImageData(out,w,h),0,0);
+ sizeValue.textContent=cell+" px";thresholdValue.textContent=threshold.value+"%";placeholder.hidden=true;canvas.hidden=false;download.disabled=false;reset.disabled=false;
 }
 function load(file){if(!file||!file.type.startsWith("image/"))return;if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{image=img;fileName.textContent=file.name+" · Procesado en tu navegador.";render()};img.src=url}
-fileInput.onchange=()=>load(fileInput.files[0]);amount.oninput=render;size.oninput=render;
+fileInput.onchange=()=>load(fileInput.files[0]);size.oninput=render;threshold.oninput=render;method.onchange=render;
 ["dragenter","dragover"].forEach(e=>dropZone.addEventListener(e,x=>{x.preventDefault();dropZone.classList.add("dragging")}));
 ["dragleave","drop"].forEach(e=>dropZone.addEventListener(e,x=>{x.preventDefault();dropZone.classList.remove("dragging")}));
 dropZone.onclick=e=>{if(e.target!==fileInput)fileInput.click()};dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
