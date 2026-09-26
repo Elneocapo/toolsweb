@@ -258,8 +258,14 @@
       if(!state.sources.length)throw new Error("Sin frames.");
       state.readySources=true;
       if(tool.fileName)tool.fileName.textContent=file.name+" · "+state.sources.length+" frames";
-      await renderPreview();
+      const initial=await processAllFrames();
+      if(!initial||!state||state.generation!==generation)return;
+      state.processed=initial;
+      state.ready=true;
+      if(state.processed.length)showFrame(state.processed[0].canvas);
       animate();
+      tool.download.disabled=false;
+      tool.download.textContent="DESCARGAR GIF ↓";
     }catch(error){
       console.error("NeoGif:",error);
       state=null;
