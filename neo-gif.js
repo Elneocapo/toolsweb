@@ -129,8 +129,10 @@
 
   function showFrame(frame){
     if(!tool||!frame)return;
-    tool.canvas.width=frame.width;
-    tool.canvas.height=frame.height;
+    if(tool.canvas.width!==frame.width||tool.canvas.height!==frame.height){
+      tool.canvas.width=frame.width;
+      tool.canvas.height=frame.height;
+    }
     tool.ctx.clearRect(0,0,frame.width,frame.height);
     tool.ctx.drawImage(frame,0,0);
     tool.canvas.hidden=false;
