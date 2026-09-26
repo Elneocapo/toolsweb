@@ -1,6 +1,7 @@
 (function(){
   const GIFUCT_URL="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct.min.js";
   const GIFJS_WORKER="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
+  const GIF_MAX_SIDE_DEFAULT=640;
   let tool=null;
   let state=null;
   let animationTimer=0;
@@ -163,7 +164,9 @@
       const processed=await tool.renderFrame(state.sources[i].canvas,i,state.sources.length);
       if(!state||state.generation!==myGeneration)return;
       state.processed.push({canvas:processed,delay:state.sources[i].delay});
-      if(i===0)showFrame(processed);
+      if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+(i+1)+"/"+state.sources.length+" frames";
+      showFrame(processed);
+      await new Promise(requestAnimationFrame);
     }
     if(!state||state.generation!==myGeneration)return;
     state.ready=true;
@@ -200,7 +203,7 @@
     if(tool.fileName)tool.fileName.textContent=file.name+" · cargando GIF…";
 
     try{
-      state.sources=await decode(file,tool.maxSide||1000);
+      state.sources=await decode(file,tool.gifMaxSide||GIF_MAX_SIDE_DEFAULT);
       if(!state||state.generation!==generation)return;
       if(!state.sources.length)throw new Error("Sin frames.");
       state.readySources=true;
@@ -220,15 +223,17 @@
     if(!state||!state.ready||!state.processed.length||!tool)return;
     tool.download.disabled=true;
     tool.download.textContent="GENERANDO GIF…";
+    if(tool.fileName)tool.fileName.textContent=state.file.name+" · codificando "+state.processed.length+" frames…";
 
     const first=state.processed[0].canvas;
     const options={
-      workers:2,
-      quality:10,
+      workers:Math.min(4,Math.max(2,navigator.hardwareConcurrency||2)),
+      quality:20,
       width:first.width,
       height:first.height,
       repeat:0,
-      workerScript:GIFJS_WORKER
+      workerScript:GIFJS_WORKER,
+      dither:false
     };
     if(tool.transparent)options.transparent=0x00ff00;
 
@@ -264,6 +269,7 @@
       if(state){
         tool.download.disabled=false;
         tool.download.textContent="DESCARGAR GIF ↓";
+        if(tool.fileName)tool.fileName.textContent=state.file.name+" · GIF listo · "+state.processed.length+" frames";
       }
     });
     encoder.render();
