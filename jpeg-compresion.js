@@ -1,59 +1,76 @@
-const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),compression=document.getElementById("compression"),compressionValue=document.getElementById("compressionValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");let image=null,url=null,renderId=0,latestBlob=null;
+const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),compression=document.getElementById("compression"),compressionValue=document.getElementById("compressionValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
+let image=null,url=null,renderId=0,latestBlob=null;
 
-function jpegQualityFromCompression(c){
-  // Mapea la compresión de forma no lineal: la mayor parte del rango
-  // mantiene detalle y el extremo final entra en cuantización JPEG muy agresiva.
+function jpegQuality(c){
   const x=c/100;
-  return Math.max(0.005,1-Math.pow(x,1.65)*0.995);
+  // Calidad invertida y muy agresiva al final del recorrido.
+  // 0% = prácticamente sin pérdida; 100% = cuantización JPEG extrema.
+  return Math.max(.008,Math.pow(1-x,2.35));
 }
 
-function render(){
+function jpegPass(source,quality){
+  return new Promise(resolve=>{
+    source.toBlob(blob=>{
+      if(!blob){resolve(null);return}
+      const objectUrl=URL.createObjectURL(blob);
+      const img=new Image();
+      img.onload=()=>{
+        URL.revokeObjectURL(objectUrl);
+        const out=document.createElement("canvas");
+        out.width=source.width;
+        out.height=source.height;
+        out.getContext("2d").drawImage(img,0,0,out.width,out.height);
+        resolve(out);
+      };
+      img.src=objectUrl;
+    },"image/jpeg",quality);
+  });
+}
+
+async function render(){
   if(!image)return;
   const id=++renderId;
   const w=Math.min(image.naturalWidth,1600);
   const h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
-
   canvas.width=w;
   canvas.height=h;
 
-  const temp=document.createElement("canvas");
-  temp.width=w;
-  temp.height=h;
-  const tc=temp.getContext("2d");
-  tc.drawImage(image,0,0,w,h);
-
   const c=+compression.value;
   compressionValue.textContent=c+"%";
-  const quality=jpegQualityFromCompression(c);
 
-  // La imagen se vuelve a codificar realmente como JPEG.
-  // No se altera la resolución, no se pixeliza artificialmente
-  // y no se aplica ningún filtro de color.
-  temp.toBlob(blob=>{
-    if(!blob||id!==renderId)return;
+  const base=document.createElement("canvas");
+  base.width=w;
+  base.height=h;
+  base.getContext("2d").drawImage(image,0,0,w,h);
 
-    latestBlob=blob;
-    const previewUrl=URL.createObjectURL(blob);
-    const compressed=new Image();
+  const quality=jpegQuality(c);
 
-    compressed.onload=()=>{
-      if(id!==renderId){
-        URL.revokeObjectURL(previewUrl);
-        return;
-      }
+  // Re-codificamos el JPEG varias veces en los niveles altos.
+  // Sigue siendo compresión JPEG real: cada pasada usa el encoder JPEG
+  // del navegador y vuelve a decodificar el resultado antes de la siguiente.
+  const passes=c<35?1:c<65?2:c<82?3:4;
+  let current=base;
 
-      ctx.clearRect(0,0,w,h);
-      ctx.drawImage(compressed,0,0,w,h);
-      URL.revokeObjectURL(previewUrl);
+  for(let i=0;i<passes;i++){
+    if(id!==renderId)return;
+    const passQuality=Math.max(.008,quality*(1-(i*.12)));
+    current=await jpegPass(current,passQuality);
+    if(!current||id!==renderId)return;
+  }
 
-      placeholder.hidden=true;
-      canvas.hidden=false;
-      download.disabled=false;
-      reset.disabled=false;
-    };
+  if(id!==renderId)return;
 
-    compressed.src=previewUrl;
-  },"image/jpeg",quality);
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(current,0,0,w,h);
+
+  // El blob descargable es exactamente la última codificación JPEG.
+  latestBlob=await new Promise(resolve=>current.toBlob(resolve,"image/jpeg",quality));
+  if(id!==renderId)return;
+
+  placeholder.hidden=true;
+  canvas.hidden=false;
+  download.disabled=false;
+  reset.disabled=false;
 }
 
 function load(file){
@@ -92,12 +109,10 @@ dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
 
 download.onclick=()=>{
   if(!latestBlob)return;
-
   const a=document.createElement("a");
   a.download="jpeg-compresion.jpg";
   a.href=URL.createObjectURL(latestBlob);
   a.click();
-
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
