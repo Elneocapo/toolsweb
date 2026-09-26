@@ -7,6 +7,106 @@
   let animationTimer=0;
   let generation=0;
 
+  const jpegPools=new WeakMap();
+
+  function getJpegPool(tool){
+    if(jpegPools.has(tool))return jpegPools.get(tool);
+    const count=Math.min(4,Math.max(2,navigator.hardwareConcurrency||2));
+    const pool={workers:[],queue:[],busy:0};
+    for(let i=0;i<count;i++){
+      const worker=new Worker("jpeg-compresion-worker.js?v=3");
+      const slot={worker,busy:false,resolve:null,reject:null,ready:false};
+      worker.onmessage=event=>{
+        const data=event.data;
+        if(data.type==="ready"){
+          slot.ready=true;
+          return;
+        }
+        if(data.type==="result"&&slot.resolve){
+          const resolve=slot.resolve;
+          slot.resolve=null;
+          slot.reject=null;
+          slot.busy=false;
+          pool.busy--;
+          resolve(new Uint8ClampedArray(data.buffer));
+          pumpJpegPool(tool,pool);
+          return;
+        }
+        if(data.type==="error"&&slot.reject){
+          const reject=slot.reject;
+          slot.resolve=null;
+          slot.reject=null;
+          slot.busy=false;
+          pool.busy--;
+          reject(new Error(data.message||"No se pudo procesar el frame."));
+          pumpJpegPool(tool,pool);
+        }
+      };
+      worker.onerror=error=>{
+        if(slot.reject)slot.reject(error);
+        slot.resolve=null;
+        slot.reject=null;
+        slot.busy=false;
+      };
+      pool.workers.push(slot);
+    }
+    jpegPools.set(tool,pool);
+    return pool;
+  }
+
+  function pumpJpegPool(tool,pool){
+    if(!pool.queue.length)return;
+    const slot=pool.workers.find(item=>!item.busy);
+    if(!slot)return;
+    const task=pool.queue.shift();
+    slot.busy=true;
+    pool.busy++;
+    slot.resolve=task.resolve;
+    slot.reject=task.reject;
+    slot.ready=false;
+    slot.worker.postMessage({
+      type:"init",
+      width:task.width,
+      height:task.height,
+      buffer:task.buffer,
+      blockSize:task.blockSize
+    },[task.buffer]);
+    const waitForReady=()=>{
+      if(slot.resolve!==task.resolve)return;
+      if(!slot.ready){requestAnimationFrame(waitForReady);return;}
+      slot.worker.postMessage({
+        type:"render",
+        token:1,
+        compression:task.compression,
+        blockSize:task.blockSize,
+        acGain:task.acGain
+      });
+    };
+    waitForReady();
+    pumpJpegPool(tool,pool);
+  }
+
+  function processJpegFrame(tool,frame){
+    const w=frame.width,h=frame.height;
+    const data=new Uint8ClampedArray(
+      frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data
+    );
+    const pool=getJpegPool(tool);
+    return new Promise((resolve,reject)=>{
+      pool.queue.push({
+        width:w,height:h,buffer:data.buffer,blockSize:Number(tool.blockSize?tool.blockSize.value:8)||8,
+        compression:Number(tool.compression?tool.compression.value:0),
+        acGain:Number(tool.acGain?tool.acGain.value:100),
+        resolve,reject
+      });
+      pumpJpegPool(tool,pool);
+    }).then(out=>{
+      const result=makeCanvas(w,h);
+      result.getContext("2d").putImageData(new ImageData(out,w,h),0,0);
+      return result;
+    });
+  }
+
   function isGif(file){
     return !!file && (file.type==="image/gif" || /\.gif$/i.test(file.name||""));
   }
@@ -283,7 +383,7 @@
     const first=state.processed[0].canvas;
     const options={
       workers:Math.min(4,Math.max(2,navigator.hardwareConcurrency||2)),
-      quality:20,
+      quality:30,
       width:first.width,
       height:first.height,
       repeat:0,
@@ -312,6 +412,11 @@
         source=keyed;
       }
       encoder.addFrame(source,{delay:frame.delay||100,copy:true});
+    });
+    encoder.on("progress",progress=>{
+      if(state&&state.generation===myGeneration&&tool.fileName){
+        tool.fileName.textContent=state.file.name+" · exportando GIF · "+Math.round(progress*100)+"%";
+      }
     });
 
     encoder.on("finished",blob=>{
@@ -403,12 +508,8 @@
       }
     },true);
 
-    document.addEventListener("click",event=>{
-      if(state&&state.readySources&&event.target.closest&&event.target.closest(".pattern")){
-        setTimeout(()=>scheduleProcess(),0);
-      }
-    },true);
+
   }
 
-  window.NeoGif={register};
+  window.NeoGif={register,processJpegFrame};
 })();
