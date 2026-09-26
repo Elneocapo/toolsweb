@@ -51,7 +51,7 @@ async function loadVideo(file){
   prepareCanvas(video.videoWidth,video.videoHeight);const fps=Math.min(30,Math.max(1,30));const stream=canvas.captureStream(fps),mime=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"].find(x=>MediaRecorder.isTypeSupported(x));if(!mime)throw new Error("WebM no soportado");
   const chunks=[],rec=new MediaRecorder(stream,{mimeType:mime});rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
   const done=new Promise(res=>rec.onstop=()=>res(new Blob(chunks,{type:mime})));rec.start();
-  video.currentTime=0;await new Promise(r=>video.onseeked=r);const duration=video.duration,start=performance.now();
+  const seek=()=>new Promise(r=>{video.onseeked=r});const duration=video.duration;video.currentTime=0;await new Promise(r=>setTimeout(r,50));
   while(video.currentTime<duration-0.01){sourceCtx.clearRect(0,0,canvas.width,canvas.height);sourceCtx.drawImage(video,0,0,canvas.width,canvas.height);applyImage();await new Promise(r=>setTimeout(r,Math.max(1,1000/fps)));video.currentTime=Math.min(duration,video.currentTime+1/fps);await new Promise(r=>video.onseeked=r)}
   rec.stop();const blob=await done;window.__removeDarkVideo=blob;download.disabled=false;fileName.textContent=file.name+" · vídeo procesado · salida WebM";ctx.clearRect(0,0,canvas.width,canvas.height);sourceCtx.clearRect(0,0,canvas.width,canvas.height);URL.revokeObjectURL(url)
  }catch(e){console.error(e);URL.revokeObjectURL(url);resetState();alert("No se pudo procesar el MP4. Tu navegador puede no permitir exportación WebM con transparencia.")}
