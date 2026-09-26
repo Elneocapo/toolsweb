@@ -112,7 +112,7 @@ self.onmessage=async event=>{
     });
   }
 };
-\`;
+`;
 
   const blob=new Blob([code],{type:"application/javascript"});
   workerUrl=URL.createObjectURL(blob);
