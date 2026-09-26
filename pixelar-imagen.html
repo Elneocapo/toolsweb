@@ -4,26 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pixelar Imagen Online Gratis — Pixelador en Tiempo Real</title>
-<meta name="description" content="Pixelar imágenes online gratis en tiempo real. Sube una imagen y ajusta el nivel de pixelado directamente desde tu navegador sin instalar ningún programa.">
+<meta name="description" content="Pixelar imágenes online gratis en tiempo real. Sube una imagen, ajusta el nivel de pixelado y descarga exactamente el resultado que ves. Todo funciona en tu navegador.">
 <meta name="keywords" content="pixelar imagen, pixelar imagen online, pixelador de imágenes, pixelar foto, pixelar foto online, pixelar imagen gratis">
-<meta name="author" content="TOOLS">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://elneocapo.github.io/toolsweb/pixelar-imagen.html">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Pixelar Imagen Online Gratis">
-<meta property="og:description" content="Pixelar imágenes en tiempo real directamente desde tu navegador. Gratis y sin instalar nada.">
+<meta property="og:description" content="Pixelador de imágenes online gratuito y en tiempo real.">
 <meta property="og:url" content="https://elneocapo.github.io/toolsweb/pixelar-imagen.html">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Pixelar Imagen Online Gratis">
-<meta name="twitter:description" content="Pixelador de imágenes online gratuito y en tiempo real.">
+<meta name="twitter:description" content="Pixelador de imágenes online en tiempo real.">
 <link rel="stylesheet" href="style.css">
+<style>
+.pixel-tool{max-width:1200px;margin:0 auto}.drop-zone{border:1px dashed #555;background:#181818;min-height:180px;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;cursor:pointer;transition:.2s}.drop-zone:hover,.drop-zone.dragging{border-color:#d9ff00;background:#202020}.drop-inner strong{display:block;font-family:"Archivo Black",sans-serif;font-size:24px;margin-bottom:10px}.drop-inner span{color:#969696;font-size:13px}.drop-zone input{display:none}.controls{margin-top:15px;padding:25px;background:#181818;border:1px solid #303030;display:grid;grid-template-columns:1fr auto;gap:25px;align-items:center}.control-label{font-size:11px;font-weight:800;letter-spacing:1px;color:#969696;display:flex;justify-content:space-between;margin-bottom:12px}#pixelValue{color:#d9ff00}input[type=range]{width:100%;accent-color:#d9ff00;cursor:pointer}.actions{display:flex;gap:10px;flex-wrap:wrap}.action{border:1px solid #444;background:#202020;color:#f2f0e8;padding:14px 20px;font:700 11px Inter,sans-serif;letter-spacing:1px;cursor:pointer}.action.primary{background:#d9ff00;color:#111;border-color:#d9ff00}.action:disabled{opacity:.3;cursor:not-allowed}.preview-wrap{margin-top:15px;min-height:400px;background-color:#151515;background-image:linear-gradient(45deg,#1d1d1d 25%,transparent 25%),linear-gradient(-45deg,#1d1d1d 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1d1d1d 75%),linear-gradient(-45deg,transparent 75%,#1d1d1d 75%);background-size:28px 28px;background-position:0 0,0 14px,14px -14px,-14px 0;border:1px solid #303030;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:20px}#previewCanvas{display:block;max-width:100%;height:auto}.canvas-placeholder{color:#666;font-size:12px;letter-spacing:1px;text-transform:uppercase}.file-info{margin-top:12px;color:#777;font-size:12px;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}#status{color:#969696}@media(max-width:700px){.controls{grid-template-columns:1fr}.preview-wrap{min-height:280px}.actions{width:100%}.action{flex:1}}
+</style>
 </head>
 <body>
 <header class="navbar"><a href="index.html" class="logo">TOOLS</a><nav><a href="index.html#herramientas">HERRAMIENTAS</a><a href="index.html#sobre">SOBRE</a></nav></header>
 <main>
-<section class="hero" style="min-height:55vh"><div class="hero-label">TOOL 001 · IMÁGENES</div><h1>PIXELAR<br>IMAGEN</h1><p>Pixela cualquier imagen en tiempo real directamente desde tu navegador.</p></section>
-<section class="tools-section"><div class="tool-card"><div class="tool-number">PIXEL IMAGE</div><div class="tool-content"><h3>HERRAMIENTA</h3><p>Aquí irá el pixelador de imágenes.</p></div></div></section>
+<section class="hero" style="min-height:55vh"><div class="hero-label">TOOL 001 · IMÁGENES</div><h1>PIXELAR<br>IMAGEN</h1><p>Sube una imagen, mueve la barra y mira el pixelado cambiar al instante. La descarga conserva exactamente el resultado de la vista previa.</p></section>
+<section class="tools-section"><div class="pixel-tool">
+<div class="section-header"><span>01</span><h2>PIXELADOR</h2></div>
+<div class="drop-zone" id="dropZone"><input id="fileInput" type="file" accept="image/*"><div class="drop-inner"><strong>SUBE TU IMAGEN</strong><span>Haz clic para elegir un archivo o arrástralo aquí</span></div></div>
+<div class="controls"><div><div class="control-label"><span>NIVEL DE PIXELADO</span><span id="pixelValue">12 px</span></div><input id="pixelSlider" type="range" min="2" max="80" value="12" step="1" aria-label="Nivel de pixelado"></div><div class="actions"><button class="action primary" id="downloadBtn" disabled>DESCARGAR PNG ↓</button><button class="action" id="resetBtn" disabled>NUEVA IMAGEN</button></div></div>
+<div class="preview-wrap" id="previewWrap"><div class="canvas-placeholder" id="canvasPlaceholder">LA VISTA PREVIA APARECERÁ AQUÍ</div><canvas id="previewCanvas" hidden></canvas></div>
+<div class="file-info"><span id="fileName">Ninguna imagen seleccionada</span><span id="status" aria-live="polite">Todo se procesa en tu navegador.</span></div>
+</div></section>
 </main>
 <footer><div class="footer-logo">TOOLS</div><p>© 2026 TOOLS</p></footer>
+<script src="pixelar-imagen.js"></script>
 </body>
 </html>
