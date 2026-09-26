@@ -1,285 +1,172 @@
-const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),compression=document.getElementById("compression"),compressionValue=document.getElementById("compressionValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
-
-let image=null,url=null,sourceCanvas=null,sourceCtx=null,sourceData=null,worker=null,workerUrl=null,renderToken=0,renderTimer=0,latestBlob=null,workerReady=false,workerBusy=false;
+const fileInput=document.getElementById("fileInput");
+const dropZone=document.getElementById("dropZone");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const compression=document.getElementById("compression");
+const compressionValue=document.getElementById("compressionValue");
+const blockSize=document.getElementById("blockSize");
+const blockSizeValue=document.getElementById("blockSizeValue");
+const acGain=document.getElementById("acGain");
+const acGainValue=document.getElementById("acGainValue");
+const download=document.getElementById("download");
+const reset=document.getElementById("reset");
+const placeholder=document.getElementById("placeholder");
+const fileName=document.getElementById("fileName");
 
 const MAX_SIDE=800;
+let image=null;
+let url=null;
+let sourceCanvas=null;
+let sourceCtx=null;
+let sourceData=null;
+let worker=null;
+let renderToken=0;
+let renderTimer=0;
+let workerBusy=false;
+let pendingRender=false;
+let latestBlob=null;
 
-function qualityFromCompression(value){
-  if(value<=0)return 1;
-  // Inverted JPEG quality curve: small slider movements already introduce
-  // visible DCT quantization, while the top end becomes heavily degraded.
-  return Math.max(0.04,1-Math.pow(value/100,0.62)*0.95);
+function setLabels(){
+  compressionValue.textContent=Number(compression.value)+"%";
+  blockSizeValue.textContent=Number(blockSize.value)+"px";
+  acGainValue.textContent=Number(acGain.value)+"%";
 }
 
-function clamp(v){
-  return Math.max(0,Math.min(255,v));
-}
+function drawOriginal(){
+  if(!sourceData)return;
+  const copy=new Uint8ClampedArray(sourceData);
+  ctx.putImageData(new ImageData(copy,canvas.width,canvas.height),0,0);
+  canvas.hidden=false;
+  placeholder.hidden=true;
+  download.disabled=false;
+  reset.disabled=false;
 
-function applyLumaCompression(original,compressed){
-  const out=new Uint8ClampedArray(original);
-  for(let i=0;i<original.length;i+=4){
-    const originalLum=.299*original[i]+.587*original[i+1]+.114*original[i+2];
-    const jpegLum=.299*compressed[i]+.587*compressed[i+1]+.114*compressed[i+2];
-    const delta=jpegLum-originalLum;
-    out[i]=clamp(original[i]+delta);
-    out[i+1]=clamp(original[i+1]+delta);
-    out[i+2]=clamp(original[i+2]+delta);
-    out[i+3]=original[i+3];
-  }
-  return out;
+  canvas.toBlob(blob=>{
+    if(renderToken===renderToken)latestBlob=blob;
+  },"image/jpeg",0.98);
 }
 
 function makeWorker(){
-  if(!window.Worker||!window.OffscreenCanvas||!window.createImageBitmap)return null;
-
-  const code=`
-let original=null,w=0,h=0,grayCanvas=null,grayCtx=null,decodeCanvas=null,decodeCtx=null;
-
-const clamp=v=>Math.max(0,Math.min(255,v));
-
-function qualityFromCompression(value){
-  if(value<=0)return 1;
-  return Math.max(0.04,1-Math.pow(value/100,0.62)*0.95);
-}
-
-function applyLumaCompression(original,compressed){
-  const out=new Uint8ClampedArray(original);
-  for(let i=0;i<original.length;i+=4){
-    const originalLum=.299*original[i]+.587*original[i+1]+.114*original[i+2];
-    const jpegLum=.299*compressed[i]+.587*compressed[i+1]+.114*compressed[i+2];
-    const delta=jpegLum-originalLum;
-    out[i]=clamp(original[i]+delta);
-    out[i+1]=clamp(original[i+1]+delta);
-    out[i+2]=clamp(original[i+2]+delta);
-    out[i+3]=original[i+3];
-  }
-  return out;
-}
-
-self.onmessage=async event=>{
-  const data=event.data;
   try{
-    if(data.type==="init"){
-      w=data.width;
-      h=data.height;
-      original=new Uint8ClampedArray(data.buffer);
+    const w=new Worker("jpeg-compresion-worker.js?v=1");
 
-      grayCanvas=new OffscreenCanvas(w,h);
-      grayCtx=grayCanvas.getContext("2d",{willReadFrequently:true});
+    w.onmessage=event=>{
+      const data=event.data;
 
-      const gray=new Uint8ClampedArray(original.length);
-      for(let i=0;i<original.length;i+=4){
-        const lum=Math.round(.299*original[i]+.587*original[i+1]+.114*original[i+2]);
-        gray[i]=lum;
-        gray[i+1]=lum;
-        gray[i+2]=lum;
-        gray[i+3]=original[i+3];
-      }
-      grayCtx.putImageData(new ImageData(gray,w,h),0,0);
-
-      decodeCanvas=new OffscreenCanvas(w,h);
-      decodeCtx=decodeCanvas.getContext("2d",{willReadFrequently:true});
-
-      self.postMessage({type:"ready"});
-      return;
-    }
-
-    if(data.type==="render"){
-      const token=data.token;
-      const quality=qualityFromCompression(data.value);
-
-      const jpegBlob=await grayCanvas.convertToBlob({
-        type:"image/jpeg",
-        quality
-      });
-
-      const bitmap=await createImageBitmap(jpegBlob);
-
-      decodeCtx.clearRect(0,0,w,h);
-      decodeCtx.drawImage(bitmap,0,0,w,h);
-      bitmap.close();
-
-      const compressed=decodeCtx.getImageData(0,0,w,h).data;
-      const out=applyLumaCompression(original,compressed);
-
-      self.postMessage({type:"result",token,buffer:out.buffer},[out.buffer]);
-    }
-  }catch(error){
-    self.postMessage({
-      type:"error",
-      token:data&&data.token,
-      message:error&&error.message?error.message:"No se pudo procesar la imagen."
-    });
-  }
-};
-`;
-
-  const blob=new Blob([code],{type:"application/javascript"});
-  workerUrl=URL.createObjectURL(blob);
-  const w=new Worker(workerUrl);
-
-  w.onmessage=event=>{
-    const data=event.data;
-
-    if(data.type==="ready"){
-      workerReady=true;
-      requestRender();
-      return;
-    }
-
-    if(data.type==="result"){
-      workerBusy=false;
-      if(data.token!==renderToken){
+      if(data.type==="ready"){
+        workerBusy=false;
         requestRender();
         return;
       }
-      const result=new Uint8ClampedArray(data.buffer);
-      ctx.putImageData(new ImageData(result,canvas.width,canvas.height),0,0);
+
+      if(data.type==="result"){
+        workerBusy=false;
+
+        if(data.token!==renderToken){
+          pendingRender=true;
+          requestRender();
+          return;
+        }
+
+        const result=new Uint8ClampedArray(data.buffer);
+        ctx.putImageData(new ImageData(result,canvas.width,canvas.height),0,0);
+        canvas.hidden=false;
+        placeholder.hidden=true;
+        download.disabled=false;
+        reset.disabled=false;
+
+        canvas.toBlob(blob=>{
+          if(data.token===renderToken)latestBlob=blob;
+        },"image/jpeg",0.98);
+
+        if(pendingRender){
+          pendingRender=false;
+          requestRender();
+        }
+        return;
+      }
+
+      if(data.type==="error"){
+        console.error("JPEG worker:",data.message);
+        workerBusy=false;
+        pendingRender=false;
+      }
+    };
+
+    w.onerror=error=>{
+      console.error("JPEG worker error:",error);
+      workerBusy=false;
+      pendingRender=false;
+      if(worker===w){
+        worker.terminate();
+        worker=null;
+      }
+    };
+
+    return w;
+  }catch(error){
+    console.error("No se pudo crear el JPEG worker:",error);
+    return null;
+  }
+}
+
+function requestRender(){
+  if(!image)return;
+
+  const value=Number(compression.value);
+  const size=Number(blockSize.value);
+  const gain=Number(acGain.value);
+  const token=renderToken;
+
+  if(value===0 && gain===100){
+    pendingRender=false;
+    if(sourceData){
+      const copy=new Uint8ClampedArray(sourceData);
+      ctx.putImageData(new ImageData(copy,canvas.width,canvas.height),0,0);
       canvas.hidden=false;
       placeholder.hidden=true;
       download.disabled=false;
       reset.disabled=false;
 
       canvas.toBlob(blob=>{
-        if(data.token===renderToken)latestBlob=blob;
+        if(token===renderToken)latestBlob=blob;
       },"image/jpeg",0.98);
-      return;
     }
-
-    if(data.type==="error"){
-      console.error("JPEG worker:",data.message);
-      fallbackRender(data.token);
-    }
-  };
-
-  w.onerror=()=>{
-    workerReady=false;
-    fallbackRender(renderToken);
-  };
-
-  w.postMessage({
-    type:"init",
-    width:canvas.width,
-    height:canvas.height,
-    buffer:sourceData.buffer
-  },[sourceData.buffer]);
-
-  sourceData=null;
-  return w;
-}
-
-async function fallbackRender(token){
-  if(!sourceCanvas||!sourceCtx||token!==renderToken)return;
-
-  const value=Number(compression.value);
-
-  if(value===0){
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(sourceCtx.getImageData(0,0,canvas.width,canvas.height).data),canvas.width,canvas.height),0,0);
-    canvas.hidden=false;
-    placeholder.hidden=true;
-    download.disabled=false;
-    reset.disabled=false;
-    canvas.toBlob(blob=>{
-      if(token===renderToken)latestBlob=blob;
-    },"image/jpeg",0.98);
     return;
   }
 
-  try{
-    const original=sourceCtx.getImageData(0,0,canvas.width,canvas.height).data;
-    const temp=document.createElement("canvas");
-    temp.width=canvas.width;
-    temp.height=canvas.height;
-    const tctx=temp.getContext("2d",{willReadFrequently:true});
+  if(!worker){
+    worker=makeWorker();
+  }
 
-    const gray=new Uint8ClampedArray(original.length);
-    for(let i=0;i<original.length;i+=4){
-      const lum=Math.round(.299*original[i]+.587*original[i+1]+.114*original[i+2]);
-      gray[i]=lum;
-      gray[i+1]=lum;
-      gray[i+2]=lum;
-      gray[i+3]=original[i+3];
+  if(worker){
+    if(workerBusy){
+      pendingRender=true;
+      return;
     }
 
-    tctx.putImageData(new ImageData(gray,canvas.width,canvas.height),0,0);
+    workerBusy=true;
+    pendingRender=false;
 
-    const quality=qualityFromCompression(value);
-
-    tctx.canvas.toBlob(async blob=>{
-      if(token!==renderToken)return;
-      const bitmap=await createImageBitmap(blob);
-      if(token!==renderToken){
-        bitmap.close();
-        return;
-      }
-
-      const decoded=document.createElement("canvas");
-      decoded.width=canvas.width;
-      decoded.height=canvas.height;
-      const dctx=decoded.getContext("2d",{willReadFrequently:true});
-      dctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-      bitmap.close();
-
-      const processed=applyLumaCompression(original,dctx.getImageData(0,0,canvas.width,canvas.height).data);
-      if(token!==renderToken)return;
-
-      ctx.putImageData(new ImageData(processed,canvas.width,canvas.height),0,0);
-      canvas.hidden=false;
-      placeholder.hidden=true;
-      download.disabled=false;
-      reset.disabled=false;
-      canvas.toBlob(outBlob=>{
-        if(token===renderToken)latestBlob=outBlob;
-      },"image/jpeg",0.98);
-    },"image/jpeg",quality);
-  }catch(error){
-    console.error("JPEG fallback:",error);
+    worker.postMessage({
+      type:"render",
+      token,
+      compression:value,
+      blockSize:size,
+      acGain:gain
+    });
   }
 }
 
-function render(){
-  if(!image)return;
-
-  compressionValue.textContent=Number(compression.value)+"%";
+function scheduleRender(){
+  setLabels();
   renderToken++;
 
   if(renderTimer)clearTimeout(renderTimer);
   renderTimer=setTimeout(()=>{
     renderTimer=0;
     requestRender();
-  },40);
-}
-
-function requestRender(){
-  if(!image)return;
-
-  const token=renderToken;
-  const value=Number(compression.value);
-
-  if(value===0){
-    if(sourceData){
-      const copy=new Uint8ClampedArray(sourceData);
-      ctx.putImageData(new ImageData(copy,canvas.width,canvas.height),0,0);
-    }else if(sourceCtx){
-      ctx.drawImage(sourceCanvas,0,0);
-    }
-    canvas.hidden=false;
-    placeholder.hidden=true;
-    download.disabled=false;
-    reset.disabled=false;
-    canvas.toBlob(blob=>{
-      if(token===renderToken)latestBlob=blob;
-    },"image/jpeg",0.98);
-    return;
-  }
-
-  if(worker&&workerReady){
-    if(workerBusy)return;
-    workerBusy=true;
-    worker.postMessage({type:"render",token,value});
-  }else{
-    fallbackRender(token);
-  }
+  },35);
 }
 
 function load(file){
@@ -289,10 +176,15 @@ function load(file){
   url=URL.createObjectURL(file);
 
   const img=new Image();
+
   img.onload=()=>{
     image=img;
 
-    const scale=Math.min(1,MAX_SIDE/Math.max(img.naturalWidth,img.naturalHeight));
+    const scale=Math.min(
+      1,
+      MAX_SIDE/Math.max(img.naturalWidth,img.naturalHeight)
+    );
+
     const w=Math.max(1,Math.round(img.naturalWidth*scale));
     const h=Math.max(1,Math.round(img.naturalHeight*scale));
 
@@ -302,54 +194,77 @@ function load(file){
     sourceCanvas=document.createElement("canvas");
     sourceCanvas.width=w;
     sourceCanvas.height=h;
+
     sourceCtx=sourceCanvas.getContext("2d",{willReadFrequently:true});
     sourceCtx.drawImage(img,0,0,w,h);
-
     sourceData=sourceCtx.getImageData(0,0,w,h).data;
+
     latestBlob=null;
-    renderToken=0;
+    renderToken++;
+    pendingRender=false;
+    workerBusy=false;
+
     compression.value=0;
-    compressionValue.textContent="0%";
+    blockSize.value=8;
+    acGain.value=100;
+    setLabels();
+
     fileName.textContent=file.name+" · JPEG procesado en tu navegador.";
 
     if(worker){
       worker.terminate();
       worker=null;
     }
-    if(workerUrl){
-      URL.revokeObjectURL(workerUrl);
-      workerUrl=null;
-    }
 
-    workerReady=false;
     worker=makeWorker();
 
-    if(!worker){
-      requestRender();
+    if(worker){
+      const initData=new Uint8ClampedArray(sourceData);
+
+      worker.postMessage({
+        type:"init",
+        width:w,
+        height:h,
+        buffer:initData.buffer,
+        blockSize:8
+      },[initData.buffer]);
     }
   };
 
   img.src=url;
 }
 
-fileInput.onchange=()=>load(fileInput.files[0]);
-compression.oninput=render;
-
-["dragenter","dragover"].forEach(n=>dropZone.addEventListener(n,e=>{
-  e.preventDefault();
-  dropZone.classList.add("dragging");
-}));
-
-["dragleave","drop"].forEach(n=>dropZone.addEventListener(n,e=>{
-  e.preventDefault();
-  dropZone.classList.remove("dragging");
-}));
-
-dropZone.onclick=e=>{
-  if(e.target!==fileInput)fileInput.click();
+fileInput.onchange=()=>{
+  const file=fileInput.files&&fileInput.files[0];
+  if(file)load(file);
 };
 
-dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
+compression.oninput=scheduleRender;
+blockSize.oninput=scheduleRender;
+acGain.oninput=scheduleRender;
+
+["dragenter","dragover"].forEach(name=>{
+  dropZone.addEventListener(name,event=>{
+    event.preventDefault();
+    dropZone.classList.add("dragging");
+  });
+});
+
+["dragleave","drop"].forEach(name=>{
+  dropZone.addEventListener(name,event=>{
+    event.preventDefault();
+    dropZone.classList.remove("dragging");
+  });
+});
+
+dropZone.onclick=event=>{
+  if(event.target!==fileInput)fileInput.click();
+};
+
+dropZone.ondrop=event=>{
+  const file=event.dataTransfer.files&&event.dataTransfer.files[0];
+  if(file)load(file);
+};
 
 download.onclick=()=>{
   if(!latestBlob)return;
@@ -375,11 +290,6 @@ reset.onclick=()=>{
     worker=null;
   }
 
-  if(workerUrl){
-    URL.revokeObjectURL(workerUrl);
-    workerUrl=null;
-  }
-
   if(url){
     URL.revokeObjectURL(url);
     url=null;
@@ -388,14 +298,21 @@ reset.onclick=()=>{
   sourceCanvas=null;
   sourceCtx=null;
   sourceData=null;
-  workerReady=false;
+  workerBusy=false;
+  pendingRender=false;
 
   fileInput.value="";
   canvas.hidden=true;
   placeholder.hidden=false;
   download.disabled=true;
   reset.disabled=true;
+
   compression.value=0;
-  compressionValue.textContent="0%";
+  blockSize.value=8;
+  acGain.value=100;
+  setLabels();
+
   fileName.textContent="Ninguna imagen seleccionada · Procesado en tu navegador.";
 };
+
+setLabels();
