@@ -123,3 +123,18 @@ resetBtn.addEventListener("click", () => {
   previewWrap.classList.remove("has-image");
   setStatus("Listo para otra imagen.");
 });
+window.NeoGif.register({
+  fileInput,dropZone,download:downloadBtn,reset:resetBtn,canvas,ctx,placeholder,fileName,maxSide:1400,
+  renderFrame(frame){
+    const previous=sourceImage;
+    frame.naturalWidth=frame.width;
+    frame.naturalHeight=frame.height;
+    sourceImage=frame;
+    render();
+    const out=document.createElement("canvas");
+    out.width=canvas.width;out.height=canvas.height;
+    out.getContext("2d").drawImage(canvas,0,0);
+    sourceImage=previous;
+    return out;
+  }
+});
