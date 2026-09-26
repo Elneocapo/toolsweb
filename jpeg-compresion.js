@@ -128,7 +128,11 @@ self.onmessage=async event=>{
     }
 
     if(data.type==="result"){
-      if(data.token!==renderToken)return;
+      workerBusy=false;
+      if(data.token!==renderToken){
+        requestRender();
+        return;
+      }
       const result=new Uint8ClampedArray(data.buffer);
       ctx.putImageData(new ImageData(result,canvas.width,canvas.height),0,0);
       canvas.hidden=false;
@@ -270,6 +274,8 @@ function requestRender(){
   }
 
   if(worker&&workerReady){
+    if(workerBusy)return;
+    workerBusy=true;
     worker.postMessage({type:"render",token,value});
   }else{
     fallbackRender(token);
