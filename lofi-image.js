@@ -348,6 +348,6 @@ async function renderNeoGifJpegFrame(frame){
 window.NeoGif.register({
   fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIDE,gifMaxSide:640,
   async renderFrame(frame){
-    return renderNeoGifJpegFrame(frame);
+    return window.NeoGif.processJpegFrame({fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,blockSize,compression,acGain},frame);
   }
 });
