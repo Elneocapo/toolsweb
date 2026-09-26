@@ -72,7 +72,7 @@ reset.addEventListener("click",()=>{fileInput.value="";resetState()});
 updateThresholdLabel();
 
 window.NeoGif.register({
-  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:1000,gifMaxSide:640,gifMaxSide:640,transparent:true,
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:1000,gifMaxSide:640,transparent:true,
   renderFrame(frame){
     const out=document.createElement("canvas");
     out.width=frame.width;out.height=frame.height;
