@@ -26,16 +26,6 @@ function processError(data,w,h,cell,cut,type){
   for(let by=0;by<sh;by++)for(let bx=0;bx<sw;bx++){const v=gray[by*sw+bx]>=128?255:0;for(let y=by*cell;y<Math.min((by+1)*cell,h);y++)for(let x=bx*cell;x<Math.min((bx+1)*cell,w);x++){const i=(y*w+x)*4;out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3]}}
   return out;
 }
-function processNone(data,w,h,cell,cut){
-  const out=new Uint8ClampedArray(data.length);
-  for(let by=0;by<h;by+=cell)for(let bx=0;bx<w;bx+=cell){
-    let sum=0,count=0;
-    for(let y=by;y<Math.min(by+cell,h);y++)for(let x=bx;x<Math.min(bx+cell,w);x++){const i=(y*w+x)*4;sum+=luminance(data[i],data[i+1],data[i+2]);count++}
-    const v=sum/count>=cut?255:0;
-    for(let y=by;y<Math.min(by+cell,h);y++)for(let x=bx;x<Math.min(bx+cell,w);x++){const i=(y*w+x)*4;out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3]}
-  }
-  return out;
-}
 function render(){
  if(!image)return;
  const max=1400,w=Math.min(image.naturalWidth,max),h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
@@ -44,7 +34,7 @@ function render(){
  let out;
  if(method.value==="bitmap")out=processBitmap(src.data,w,h,cell,cut);
  else if(method.value==="floyd"||method.value==="atkinson")out=processError(src.data,w,h,cell,cut,method.value);
- else out=processNone(src.data,w,h,cell,cut);
+
  ctx.putImageData(new ImageData(out,w,h),0,0);
  sizeValue.textContent=cell+" px";thresholdValue.textContent=threshold.value+"%";placeholder.hidden=true;canvas.hidden=false;download.disabled=false;reset.disabled=false;
 }
