@@ -36,27 +36,89 @@
 const palette=document.getElementById('palette');
 const status=document.getElementById('status');
 let colors=[];
-function randomColor(){return '#'+Math.floor(Math.random()*16777216).toString(16).padStart(6,'0').toUpperCase()}
-function render(){
- palette.innerHTML='';
- colors.forEach((color,i)=>{
-   const swatch=document.createElement('div');
-   swatch.className='swatch';
-   swatch.style.background=color;
-   swatch.innerHTML='<span>'+color+'</span>';
-   swatch.title='Haz clic para cambiar este color';
-   swatch.onclick=()=>{colors[i]=randomColor();render()};
-   palette.appendChild(swatch);
- });
- status.textContent='';
+
+function hslToHex(h,s,l){
+  s/=100;l/=100;
+  const k=n=>(n+h/30)%12;
+  const a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return '#'+[f(0),f(8),f(4)].map(x=>Math.round(255*x).toString(16).padStart(2,'0')).join('').toUpperCase();
 }
-function generate(){colors=Array.from({length:5},randomColor);render()}
-document.getElementById('generate').onclick=generate;
+
+function generatePalette(){
+  const base=Math.floor(Math.random()*360);
+  const type=Math.floor(Math.random()*5);
+  let hues;
+  if(type===0){
+    hues=[base,base+30,base+60,base+180,base+210];
+  }else if(type===1){
+    hues=[base,base+15,base+35,base+55,base+75];
+  }else if(type===2){
+    hues=[base,base+120,base+240,base+120,base+240];
+  }else if(type===3){
+    hues=[base,base+180,base+150,base+30,base+210];
+  }else{
+    hues=[base,base,base,base,base];
+  }
+
+  const schemes=[
+    [[48,88],[42,78],[36,68],[58,55],[28,38]],
+    [[52,82],[46,72],[40,64],[58,54],[30,42]],
+    [[48,80],[42,70],[35,60],[55,52],[25,40]]
+  ];
+  const scheme=schemes[Math.floor(Math.random()*schemes.length)];
+
+  colors=hues.map((h,i)=>{
+    const [l,s]=scheme[i];
+    return hslToHex((h+360)%360,s,l);
+  });
+  render();
+}
+
+function render(){
+  palette.innerHTML='';
+  colors.forEach((color,i)=>{
+    const swatch=document.createElement('div');
+    swatch.className='swatch';
+    swatch.style.background=color;
+    swatch.innerHTML='<span>'+color+'</span>';
+    swatch.title='Haz clic para cambiar este color';
+    swatch.onclick=()=>regenerateOne(i);
+    palette.appendChild(swatch);
+  });
+  status.textContent='';
+}
+
+function regenerateOne(index){
+  const base=parseInt(colors[0].slice(1),16);
+  const r=(base>>16)&255,g=(base>>8)&255,b=base&255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  let h=0;
+  if(max!==min){
+    const d=max-min;
+    if(max===r) h=((g-b)/d)%6;
+    else if(max===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h*=60;if(h<0)h+=360;
+  }
+  const offsets=[0,30,60,180,210];
+  const offset=offsets[index];
+  colors[index]=hslToHex((h+offset)%360, 45+Math.random()*35, 35+Math.random()*35);
+  render();
+}
+
+document.getElementById('generate').onclick=generatePalette;
 document.getElementById('copy').onclick=async()=>{
- const text=colors.join(', ');
- try{await navigator.clipboard.writeText(text);status.textContent='COPIADO ✓'}catch{status.textContent='No se pudo copiar automáticamente'}
+  const text=colors.join(', ');
+  try{
+    await navigator.clipboard.writeText(text);
+    status.textContent='COPIADO ✓';
+  }catch{
+    status.textContent='No se pudo copiar automáticamente';
+  }
 };
-generate();
+
+generatePalette();
 </script>
 </body>
 </html>
