@@ -155,35 +155,81 @@
     tick();
   }
 
-  async function processFrames(){
+  async function renderPreview(){
     if(!state||!tool||!tool.renderFrame)return;
     const myGeneration=state.generation;
-    state.processed=[];
+    const index=Math.min(state.previewIndex||0,state.sources.length-1);
     tool.download.disabled=true;
-    tool.download.textContent="PROCESANDO GIF…";
-    for(let i=0;i<state.sources.length;i++){
+    tool.download.textContent="ACTUALIZANDO…";
+    try{
+      const processed=await tool.renderFrame(state.sources[index].canvas,index,state.sources.length);
       if(!state||state.generation!==myGeneration)return;
-      const processed=await tool.renderFrame(state.sources[i].canvas,i,state.sources.length);
-      if(!state||state.generation!==myGeneration)return;
-      state.processed.push({canvas:processed,delay:state.sources[i].delay});
-      if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+(i+1)+"/"+state.sources.length+" frames";
+      state.preview={canvas:processed,delay:state.sources[index].delay,index};
       showFrame(processed);
-      await new Promise(requestAnimationFrame);
+      tool.download.disabled=false;
+      tool.download.textContent="DESCARGAR GIF ↓";
+      if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+state.sources.length+" frames · preview actualizado";
+    }catch(error){
+      console.error("NeoGif preview:",error);
+      if(state&&state.generation===myGeneration){
+        tool.download.disabled=false;
+        tool.download.textContent="DESCARGAR GIF ↓";
+      }
     }
-    if(!state||state.generation!==myGeneration)return;
-    state.ready=true;
-    tool.download.disabled=false;
-    tool.download.textContent="DESCARGAR GIF ↓";
-    animate();
   }
 
-  function scheduleProcess(){
+  async function processAllFrames(){
+    if(!state||!tool||!tool.renderFrame)return null;
+    const myGeneration=state.generation;
+    const total=state.sources.length;
+    const processed=new Array(total);
+    const concurrency=Math.min(4,Math.max(2,navigator.hardwareConcurrency||2));
+    let nextIndex=0;
+
+    async function workerLoop(){
+      while(true){
+        if(!state||state.generation!==myGeneration)return false;
+        const index=nextIndex++;
+        if(index>=total)return true;
+        const canvas=await tool.renderFrame(state.sources[index].canvas,index,total);
+        if(!state||state.generation!==myGeneration)return false;
+        processed[index]={canvas,delay:state.sources[index].delay};
+        if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+(index+1)+"/"+total+" frames";
+      }
+    }
+
+    await Promise.all(Array.from({length:concurrency},()=>workerLoop()));
+    if(!state||state.generation!==myGeneration)return null;
+    return processed;
+  }
+
+  async function processForDownload(){
+    if(!state||!tool)return;
+    const myGeneration=state.generation;
+    tool.download.disabled=true;
+    tool.download.textContent="PROCESANDO GIF…";
+
+    try{
+      const processed=await processAllFrames();
+      if(!processed||!state||state.generation!==myGeneration)return;
+      state.processed=processed;
+      state.ready=true;
+      tool.download.textContent="GENERANDO GIF…";
+      await encodeGif();
+    }catch(error){
+      console.error("NeoGif processing:",error);
+      if(state&&state.generation===myGeneration){
+        tool.download.disabled=false;
+        tool.download.textContent="DESCARGAR GIF ↓";
+      }
+    }
+  }
+
+  function schedulePreview(){
     if(!state||!state.readySources)return;
-    generation++;
-    state.generation=generation;
     state.ready=false;
     clearTimeout(state.processTimer);
-    state.processTimer=setTimeout(()=>processFrames(),80);
+    state.processTimer=setTimeout(()=>renderPreview(),100);
   }
 
   async function startGif(file){
@@ -195,8 +241,10 @@
       generation,
       sources:[],
       processed:[],
+      preview:null,
+      previewIndex:0,
       readySources:false,
-      ready:false,
+      ready:true,
       processTimer:0
     };
     tool.download.disabled=true;
@@ -210,7 +258,8 @@
       if(!state.sources.length)throw new Error("Sin frames.");
       state.readySources=true;
       if(tool.fileName)tool.fileName.textContent=file.name+" · "+state.sources.length+" frames";
-      await processFrames();
+      await renderPreview();
+      animate();
     }catch(error){
       console.error("NeoGif:",error);
       state=null;
@@ -221,12 +270,9 @@
     }
   }
 
-  function downloadGif(){
-    if(!state||!state.ready||!state.processed.length||!tool)return;
-    tool.download.disabled=true;
-    tool.download.textContent="GENERANDO GIF…";
-    if(tool.fileName)tool.fileName.textContent=state.file.name+" · codificando "+state.processed.length+" frames…";
-
+  async function encodeGif(){
+    if(!state||!state.processed.length||!tool)return;
+    const myGeneration=state.generation;
     const first=state.processed[0].canvas;
     const options={
       workers:Math.min(4,Math.max(2,navigator.hardwareConcurrency||2)),
@@ -260,7 +306,9 @@
       }
       encoder.addFrame(source,{delay:frame.delay||100,copy:true});
     });
+
     encoder.on("finished",blob=>{
+      if(!state||state.generation!==myGeneration)return;
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       const base=(state.file.name||"imagen.gif").replace(/\.[^.]+$/,"");
@@ -268,13 +316,16 @@
       a.href=url;
       a.click();
       setTimeout(()=>URL.revokeObjectURL(url),1500);
-      if(state){
-        tool.download.disabled=false;
-        tool.download.textContent="DESCARGAR GIF ↓";
-        if(tool.fileName)tool.fileName.textContent=state.file.name+" · GIF listo · "+state.processed.length+" frames";
-      }
+      tool.download.disabled=false;
+      tool.download.textContent="DESCARGAR GIF ↓";
+      if(tool.fileName)tool.fileName.textContent=state.file.name+" · GIF listo · "+state.processed.length+" frames";
     });
     encoder.render();
+  }
+
+  function downloadGif(){
+    if(!state||!tool||!state.readySources)return;
+    processForDownload();
   }
 
   function clearGifState(){
@@ -319,7 +370,7 @@
     },true);
 
     tool.download.addEventListener("click",event=>{
-      if(state&&state.ready){
+      if(state&&state.readySources){
         event.preventDefault();
         event.stopImmediatePropagation();
         downloadGif();
@@ -337,10 +388,10 @@
       if(state&&state.readySources&&event.target!==tool.fileInput&&event.target!==tool.download){
         event.preventDefault();
         event.stopImmediatePropagation();
+        state.generation=++generation;
         state.ready=false;
         clearTimeout(state.processTimer);
-        state.generation=++generation;
-        state.processTimer=setTimeout(()=>processFrames(),80);
+        state.processTimer=setTimeout(()=>renderPreview(),120);
       }
     },true);
 
@@ -348,10 +399,10 @@
       if(state&&state.readySources&&event.target!==tool.fileInput){
         event.preventDefault();
         event.stopImmediatePropagation();
+        state.generation=++generation;
         state.ready=false;
         clearTimeout(state.processTimer);
-        state.generation=++generation;
-        state.processTimer=setTimeout(()=>processFrames(),80);
+        state.processTimer=setTimeout(()=>renderPreview(),120);
       }
     },true);
 
