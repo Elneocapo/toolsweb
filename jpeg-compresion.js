@@ -32,20 +32,6 @@ function setLabels(){
   acGainValue.textContent=Number(acGain.value)+"%";
 }
 
-function drawOriginal(){
-  if(!sourceData)return;
-  const copy=new Uint8ClampedArray(sourceData);
-  ctx.putImageData(new ImageData(copy,canvas.width,canvas.height),0,0);
-  canvas.hidden=false;
-  placeholder.hidden=true;
-  download.disabled=false;
-  reset.disabled=false;
-
-  canvas.toBlob(blob=>{
-    if(renderToken===renderToken)latestBlob=blob;
-  },"image/jpeg",0.98);
-}
-
 function makeWorker(){
   try{
     const w=new Worker("jpeg-compresion-worker.js?v=1");
