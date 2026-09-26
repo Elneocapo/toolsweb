@@ -28,52 +28,16 @@
 <nav><a href="index.html">INICIO</a><a href="index.html#herramientas">HERRAMIENTAS</a><a href="index.html#sobre">SOBRE</a></nav>
 </header>
 <main class="palette-page">
-<div class="palette-header"><div><div class="hero-label">003 · COLORES</div><h1>PALETA</h1></div><p>Genera una paleta aleatoria de 5 colores. Haz clic en un color para regenerarlo.</p></div>
+<div class="palette-header"><div><div class="hero-label">003 · COLORES</div><h1>PALETA</h1></div><p>Paletas seleccionadas de 5 colores. Cada combinación está diseñada para funcionar bien en conjunto.</p></div>
 <div class="palette" id="palette"></div>
 <div class="palette-actions"><button class="palette-btn" id="generate">NUEVA PALETA ↻</button><button class="palette-btn" id="copy">COPIAR HEX ↗</button><span class="palette-status" id="status"></span></div>
 </main>
 <script>
+const PALETTES=[["#69D2E7","#A7DBD8","#E0E4CC","#F38630","#FA6900"],["#FE4365","#FC9D9A","#F9CDAD","#C8C8A9","#83AF9B"],["#ECD078","#D95B43","#C02942","#542437","#53777A"],["#556270","#4ECDC4","#C7F464","#FF6B6B","#C44D58"],["#774F38","#E08E79","#F1D4AF","#ECE5CE","#C5E0DC"],["#E8DDCB","#CDB380","#036564","#033649","#031634"],["#490A3D","#BD1550","#E97F02","#F8CA00","#8A9B0F"],["#00A8C6","#40C0CB","#F9F2E7","#AEE239","#8FBE00"],["#594F4F","#547980","#45ADA8","#9DE0AD","#E5FCC2"],["#FFEDBC","#FFB85F","#FF9A5A","#F25C54","#D63B3B"],["#2E294E","#541388","#F1E9DA","#FFD400","#D90368"],["#114B5F","#028090","#E4FDE1","#456990","#F45B69"],["#2A363B","#E84A5F","#FF847C","#FECEA8","#99B898"],["#F8B195","#F67280","#C06C84","#6C5B7B","#355C7D"],["#F0F0F0","#C8C8C8","#8A8A8A","#4A4A4A","#202020"],["#FDF0D5","#003049","#669BBC","#780000","#C1121F"],["#03045E","#0077B6","#00B4D8","#90E0EF","#CAF0F8"],["#264653","#2A9D8F","#E9C46A","#F4A261","#E76F51"],["#606C38","#283618","#FEFAE0","#DDA15E","#BC6C25"],["#1B4332","#2D6A4F","#40916C","#74C69D","#B7E4C7"],["#3D405B","#81B29A","#F2CC8F","#E07A5F","#F4F1DE"],["#5F0F40","#9A031E","#FB8B24","#E36414","#0F4C5C"],["#10002B","#240046","#3C096C","#5A189A","#7B2CBF"],["#03071E","#370617","#6A040F","#9D0208","#D00000"],["#1A535C","#4ECDC4","#F7FFF7","#FF6B6B","#FFE66D"],["#22223B","#4A4E69","#9A8C98","#C9ADA7","#F2E9E4"],["#231F20","#BB4430","#7EBDC2","#F3DFA2","#EFE6DD"],["#264653","#2A9D8F","#8AB17D","#E9C46A","#F4A261"],["#E63946","#F1FAEE","#A8DADC","#457B9D","#1D3557"],["#FFBE0B","#FB5607","#FF006E","#8338EC","#3A86FF"],["#335C67","#FFF3B0","#E09F3E","#9E2A2B","#540B0E"],["#F94144","#F3722C","#F8961E","#F9C74F","#90BE6D"],["#577590","#43AA8B","#90BE6D","#F9C74F","#F8961E"],["#F72585","#B5179E","#7209B7","#560BAD","#480CA8"],["#4361EE","#4895EF","#4CC9F0","#F72585","#B5179E"],["#FFDDD2","#FFB4A2","#E5989B","#B5838D","#6D6875"],["#D8E2DC","#FFE5D9","#FFCAD4","#F4ACB7","#9D8189"],["#F6BD60","#F7EDE2","#F5CAC3","#84A59D","#F28482"],["#2B2D42","#8D99AE","#EDF2F4","#EF233C","#D90429"],["#283618","#606C38","#FEFAE0","#DDA15E","#BC6C25"],["#003049","#D62828","#F77F00","#FCBF49","#EAE2B7"],["#FF9F1C","#FFBF69","#CBF3F0","#2EC4B6","#011627"],["#E63946","#F4A261","#E9C46A","#2A9D8F","#264653"],["#6B705C","#A5A58D","#B7B7A4","#FFE8D6","#DDBEA9"],["#B5838D","#6D6875","#E5989B","#FFB4A2","#FFCDB2"],["#4A4E69","#22223B","#F2E9E4","#C9ADA7","#9A8C98"],["#8E9AAF","#CBC0D3","#EFD3D7","#FEEAFA","#DEE2FF"],["#355070","#6D597A","#B56576","#E56B6F","#EAAC8B"],["#264653","#287271","#2A9D8F","#E9C46A","#F4A261"],["#03045E","#023E8A","#0077B6","#0096C7","#00B4D8"],["#780000","#C1121F","#FDF0D5","#003049","#669BBC"],["#081C15","#1B4332","#2D6A4F","#40916C","#74C69D"],["#0B132B","#1C2541","#3A506B","#5BC0BE","#6FFFE9"],["#2D3047","#1B998B","#FFFD82","#FF9B71","#E84855"],["#F4F1DE","#E07A5F","#3D405B","#81B29A","#F2CC8F"],["#FAD2E1","#C5DEDD","#DBE7E4","#F0EFEB","#CDDAFD"],["#EDE7F6","#D1C4E9","#B39DDB","#9575CD","#7E57C2"],["#FFF1E6","#FDE2E4","#FAD2E1","#CDEAC0","#B9FBC0"],["#F7F7F2","#E4E6C3","#899878","#222725","#121113"],["#FFFCF2","#CCC5B9","#403D39","#252422","#EB5E28"],["#F8F9FA","#DEE2E6","#ADB5BD","#495057","#212529"],["#10002B","#3C096C","#7B2CBF","#9D4EDD","#C77DFF"],["#1E1E24","#92140C","#FFF8F0","#FFCF99","#111D4A"],["#1B4965","#62B6CB","#CAE9FF","#5FA8D3","#BEE9E8"],["#F7B2BD","#F7717D","#DE639A","#7C5295","#564D80"],["#2F3E46","#354F52","#52796F","#84A98C","#CAD2C5"],["#FF6F59","#254441","#43AA8B","#B2B09B","#EF3054"],["#F72585","#7209B7","#3A0CA3","#4361EE","#4CC9F0"],["#F1FAEE","#A8DADC","#457B9D","#1D3557","#E63946"],["#2D3142","#4F5D75","#BFC0C0","#FFFFFF","#EF8354"],["#2C1320","#532E1C","#6B4226","#D9B44A","#F1E0B0"],["#264653","#E76F51","#F4A261","#E9C46A","#2A9D8F"],["#F6F4D2","#CBDFBD","#F19C79","#A44A3F","#2F2D2E"],["#0F4C5C","#5F0F40","#9A031E","#FB8B24","#E36414"],["#8CB369","#F4E285","#F4A259","#5B8E7D","#BC4B51"],["#386641","#6A994E","#A7C957","#F2E8CF","#BC4749"],["#264653","#2A9D8F","#E9C46A","#F4A261","#E76F51"],["#FFB5A7","#FCD5CE","#F8EDEB","#F9DCC4","#FEC89A"],["#CDB4DB","#FFC8DD","#FFAFCC","#BDE0FE","#A2D2FF"],["#03045E","#0077B6","#00B4D8","#90E0EF","#CAF0F8"],["#FFCAD4","#F4ACB7","#9D8189","#6D6875","#4A4E69"],["#2E1F27","#854D4D","#C38D94","#E7C8C8","#F5E9E9"],["#D9ED92","#B5E48C","#99D98C","#76C893","#52B69A"],["#184E77","#1E6091","#168AAD","#34A0A4","#52B69A"],["#D00000","#FFBA08","#3F88C5","#032B43","#136F63"],["#2B2D42","#8D99AE","#EDF2F4","#EF233C","#D90429"],["#4F772D","#90A955","#ECF39E","#31572C","#132A13"],["#6A4C93","#8AC926","#1982C4","#FFCA3A","#FF595E"],["#F94144","#F3722C","#F8961E","#F9844A","#43AA8B"],["#03071E","#370617","#6A040F","#9D0208","#D00000"],["#081C15","#1B4332","#2D6A4F","#40916C","#95D5B2"],["#0D3B66","#FAF0CA","#F4D35E","#EE964B","#F95738"],["#5E548E","#9F86C0","#BE95C4","#E0B1CB","#F6F0FF"],["#F28482","#F5CAC3","#84A59D","#F7EDE2","#F6BD60"],["#2B2D42","#8D99AE","#EDF2F4","#EF233C","#D90429"],["#003049","#D62828","#F77F00","#FCBF49","#EAE2B7"],["#1D3557","#457B9D","#A8DADC","#F1FAEE","#E63946"],["#6D597A","#B56576","#E56B6F","#EAAC8B","#355070"],["#231942","#5E548E","#9F86C0","#BE95C4","#E0B1CB"],["#0B132B","#1C2541","#3A506B","#5BC0BE","#6FFFE9"],["#FAD2E1","#BEE1E6","#F0EFEB","#DDE5B6","#ADC178"],["#3A0CA3","#4361EE","#4CC9F0","#F72585","#7209B7"],["#E9C46A","#F4A261","#E76F51","#2A9D8F","#264653"],["#F8F9FA","#212529","#495057","#ADB5BD","#DEE2E6"],["#FEFAE0","#283618","#606C38","#DDA15E","#BC6C25"],["#FFE5D9","#FFCAD4","#F4ACB7","#9D8189","#6D6875"],["#F1FAEE","#A8DADC","#457B9D","#1D3557","#E63946"],["#22223B","#4A4E69","#9A8C98","#C9ADA7","#F2E9E4"],["#10002B","#240046","#5A189A","#9D4EDD","#C77DFF"],["#F4F1DE","#E07A5F","#3D405B","#81B29A","#F2CC8F"],["#E63946","#F1FAEE","#A8DADC","#457B9D","#1D3557"],["#264653","#2A9D8F","#E9C46A","#F4A261","#E76F51"],["#2F3E46","#354F52","#52796F","#84A98C","#CAD2C5"],["#FFF1E6","#FDE2E4","#FAD2E1","#CDEAC0","#B9FBC0"],["#FFBE0B","#FB5607","#FF006E","#8338EC","#3A86FF"],["#606C38","#283618","#FEFAE0","#DDA15E","#BC6C25"],["#003049","#669BBC","#FDF0D5","#780000","#C1121F"],["#355070","#6D597A","#B56576","#E56B6F","#EAAC8B"],["#386641","#6A994E","#A7C957","#F2E8CF","#BC4749"],["#F6BD60","#F7EDE2","#F5CAC3","#84A59D","#F28482"],["#2D3047","#1B998B","#FFFD82","#FF9B71","#E84855"],["#F7B2BD","#F7717D","#DE639A","#7C5295","#564D80"],["#5F0F40","#9A031E","#FB8B24","#E36414","#0F4C5C"],["#EDE7F6","#D1C4E9","#B39DDB","#9575CD","#7E57C2"],["#03045E","#023E8A","#0077B6","#0096C7","#00B4D8"],["#D9ED92","#B5E48C","#99D98C","#76C893","#52B69A"],["#184E77","#1E6091","#168AAD","#34A0A4","#52B69A"],["#F6F4D2","#CBDFBD","#F19C79","#A44A3F","#2F2D2E"],["#FFFCF2","#CCC5B9","#403D39","#252422","#EB5E28"],["#F8B195","#F67280","#C06C84","#6C5B7B","#355C7D"],["#00A8C6","#40C0CB","#F9F2E7","#AEE239","#8FBE00"],["#594F4F","#547980","#45ADA8","#9DE0AD","#E5FCC2"],["#490A3D","#BD1550","#E97F02","#F8CA00","#8A9B0F"],["#E8DDCB","#CDB380","#036564","#033649","#031634"],["#556270","#4ECDC4","#C7F464","#FF6B6B","#C44D58"],["#ECD078","#D95B43","#C02942","#542437","#53777A"],["#FE4365","#FC9D9A","#F9CDAD","#C8C8A9","#83AF9B"],["#69D2E7","#A7DBD8","#E0E4CC","#F38630","#FA6900"]];
 const palette=document.getElementById('palette');
 const status=document.getElementById('status');
 let colors=[];
-
-function hslToHex(h,s,l){
-  s/=100;l/=100;
-  const k=n=>(n+h/30)%12;
-  const a=s*Math.min(l,1-l);
-  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
-  return '#'+[f(0),f(8),f(4)].map(x=>Math.round(255*x).toString(16).padStart(2,'0')).join('').toUpperCase();
-}
-
-function generatePalette(){
-  const base=Math.floor(Math.random()*360);
-  const type=Math.floor(Math.random()*5);
-  let hues;
-  if(type===0){
-    hues=[base,base+30,base+60,base+180,base+210];
-  }else if(type===1){
-    hues=[base,base+15,base+35,base+55,base+75];
-  }else if(type===2){
-    hues=[base,base+120,base+240,base+120,base+240];
-  }else if(type===3){
-    hues=[base,base+180,base+150,base+30,base+210];
-  }else{
-    hues=[base,base,base,base,base];
-  }
-
-  const schemes=[
-    [[48,88],[42,78],[36,68],[58,55],[28,38]],
-    [[52,82],[46,72],[40,64],[58,54],[30,42]],
-    [[48,80],[42,70],[35,60],[55,52],[25,40]]
-  ];
-  const scheme=schemes[Math.floor(Math.random()*schemes.length)];
-
-  colors=hues.map((h,i)=>{
-    const [l,s]=scheme[i];
-    return hslToHex((h+360)%360,s,l);
-  });
-  render();
-}
+let lastIndex=-1;
 
 function render(){
   palette.innerHTML='';
@@ -83,41 +47,34 @@ function render(){
     swatch.style.background=color;
     swatch.innerHTML='<span>'+color+'</span>';
     swatch.title='Haz clic para cambiar este color';
-    swatch.onclick=()=>regenerateOne(i);
+    swatch.onclick=()=>changeOne(i);
     palette.appendChild(swatch);
   });
   status.textContent='';
 }
 
-function regenerateOne(index){
-  const base=parseInt(colors[0].slice(1),16);
-  const r=(base>>16)&255,g=(base>>8)&255,b=base&255;
-  const max=Math.max(r,g,b),min=Math.min(r,g,b);
-  let h=0;
-  if(max!==min){
-    const d=max-min;
-    if(max===r) h=((g-b)/d)%6;
-    else if(max===g) h=(b-r)/d+2;
-    else h=(r-g)/d+4;
-    h*=60;if(h<0)h+=360;
-  }
-  const offsets=[0,30,60,180,210];
-  const offset=offsets[index];
-  colors[index]=hslToHex((h+offset)%360, 45+Math.random()*35, 35+Math.random()*35);
+function generatePalette(){
+  let i;
+  do{i=Math.floor(Math.random()*PALETTES.length)}while(i===lastIndex && PALETTES.length>1);
+  lastIndex=i;
+  colors=[...PALETTES[i]];
+  render();
+}
+
+function changeOne(index){
+  let i;
+  do{i=Math.floor(Math.random()*PALETTES.length)}while(i===lastIndex && PALETTES.length>1);
+  lastIndex=i;
+  colors[index]=PALETTES[i][index];
   render();
 }
 
 document.getElementById('generate').onclick=generatePalette;
 document.getElementById('copy').onclick=async()=>{
   const text=colors.join(', ');
-  try{
-    await navigator.clipboard.writeText(text);
-    status.textContent='COPIADO ✓';
-  }catch{
-    status.textContent='No se pudo copiar automáticamente';
-  }
+  try{await navigator.clipboard.writeText(text);status.textContent='COPIADO ✓'}
+  catch{status.textContent='No se pudo copiar automáticamente'}
 };
-
 generatePalette();
 </script>
 </body>
