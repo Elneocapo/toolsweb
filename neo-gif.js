@@ -159,16 +159,15 @@
     if(!state||!tool||!tool.renderFrame)return;
     const myGeneration=state.generation;
     const index=Math.min(state.previewIndex||0,state.sources.length-1);
-    tool.download.disabled=true;
-    tool.download.textContent="ACTUALIZANDO…";
+
     try{
       const processed=await tool.renderFrame(state.sources[index].canvas,index,state.sources.length);
       if(!state||state.generation!==myGeneration)return;
       state.preview={canvas:processed,delay:state.sources[index].delay,index};
+      state.previewIndex=index;
       showFrame(processed);
-      tool.download.disabled=false;
-      tool.download.textContent="DESCARGAR GIF ↓";
-      if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+state.sources.length+" frames · preview actualizado";
+
+      if(tool.fileName)tool.fileName.textContent=state.file.name+" · "+state.sources.length+" frames · parámetro aplicado";
     }catch(error){
       console.error("NeoGif preview:",error);
       if(state&&state.generation===myGeneration){
@@ -227,9 +226,11 @@
 
   function schedulePreview(){
     if(!state||!state.readySources)return;
-    state.ready=false;
+    if(animationTimer)clearTimeout(animationTimer);
     clearTimeout(state.processTimer);
-    state.processTimer=setTimeout(()=>renderPreview(),100);
+    state.generation=++generation;
+    state.ready=false;
+    state.processTimer=setTimeout(()=>renderPreview(),90);
   }
 
   async function startGif(file){
@@ -392,23 +393,13 @@
 
     document.addEventListener("input",event=>{
       if(state&&state.readySources&&event.target!==tool.fileInput&&event.target!==tool.download){
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        state.generation=++generation;
-        state.ready=false;
-        clearTimeout(state.processTimer);
-        state.processTimer=setTimeout(()=>renderPreview(),120);
+        schedulePreview();
       }
     },true);
 
     document.addEventListener("change",event=>{
       if(state&&state.readySources&&event.target!==tool.fileInput){
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        state.generation=++generation;
-        state.ready=false;
-        clearTimeout(state.processTimer);
-        state.processTimer=setTimeout(()=>renderPreview(),120);
+        schedulePreview();
       }
     },true);
 
