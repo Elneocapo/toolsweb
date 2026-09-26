@@ -27,6 +27,9 @@ const reset=document.getElementById("reset");
 const placeholder=document.getElementById("placeholder");
 const fileName=document.getElementById("fileName");
 
+const MAX_SIDE=1000;
+const PATTERN_WORDS=`FFFF FFFF FFFF FFFF DDFF 77FF DDFF 77FF DD77 DD77 DD77 DD77 DD77 AA55 AA55 AA55 AA55 55FF 55FF 55FF 55FF AAAA AAAA AAAA AAAA EEDD BB77 EEDD BB77 8888 8888 8888 8888 B130 031B D8C0 0C8D 8010 0220 0108 4004 FF88 8888 FF88 8888 FF80 8080 FF08 0808 8000 0000 0000 0000 8040 2000 0204 0800 8244 3944 8201 0101 F874 2247 8F17 2271 55A0 4040 550A 0404 2050 8888 8888 0502 BF00 BFBF B0B0 B0B0 0000 0000 0000 0000 8000 0800 8000 0800 8800 2200 8800 2200 8822 8822 8822 8822 AA00 AA00 AA00 AA00 FF00 FF00 FF00 FF00 1122 4488 1122 4488 FF00 0000 FF00 0000 0102 0408 1020 4080 AA00 8000 8800 8000 FF80 8080 8080 8080 081C 22C1 8001 0204 8814 2241 8800 AA00 40A0 0000 040A 0000 0384 4830 0C02 0101 8080 413E 0808 14E3 1020 54AA FF02 0408 7789 8F8F 7798 F8F8 0008 142A 552A 1408`.split(/\s+/);
+
 let image=null;
 let objectUrl=null;
 let sourceCanvas=null;
@@ -35,61 +38,8 @@ let sourceData=null;
 let enabledPatterns=new Array(38).fill(true);
 let patternBits=[];
 let patternDensity=[];
-
-const MAX_SIDE=1000;
-
-const rawPatternWords=`FFFF FFFF FFFF FFFF DDFF 77FF DDFF 77FF DD77 DD77 DD77 DD77 DD77 AA55 AA55 AA55 AA55 55FF 55FF 55FF 55FF AAAA AAAA AAAA AAAA EEDD BB77 EEDD BB77 8888 8888 8888 8888 B130 031B D8C0 0C8D 8010 0220 0108 4004 FF88 8888 FF88 8888 FF80 8080 FF08 0808 8000 0000 0000 0000 8040 2000 0204 0800 8244 3944 8201 0101 F874 2247 8F17 2271 55A0 4040 550A 0404 2050 8888 8888 0502 BF00 BFBF B0B0 B0B0 0000 0000 0000 0000 8000 0800 8000 0800 8800 2200 8800 2200 8822 8822 8822 8822 AA00 AA00 AA00 AA00 FF00 FF00 FF00 FF00 1122 4488 1122 4488 FF00 0000 FF00 0000 0102 0408 1020 4080 AA00 8000 8800 8000 FF80 8080 8080 8080 081C 22C1 8001 0204 8814 2241 8800 AA00 40A0 0000 040A 0000 0384 4830 0C02 0101 8080 413E 0808 14E3 1020 54AA FF02 0408 7789 8F8F 7798 F8F8 0008 142A 552A 1408`.split(/\s+/);
-for(let p=0;p<38;p++){
-  const bits=[];
-  let ones=0;
-  for(let row=0;row<4;row++){
-    const word=parseInt(rawPatternWords[p*4+row],16);
-    for(let bit=15;bit>=0;bit--){
-      bits.push((word>>bit)&1);
-    }
-  }
-  patternBits.push(bits);
-  ones=bits.reduce((sum,v)=>sum+v,0);
-  patternDensity.push(ones/64);
-}
-
-const sortedPatternIndices=[...Array(38).keys()].sort((a,b)=>patternDensity[a]-patternDensity[b]);
-
-function makePatternPreview(index){
-  const c=document.createElement("canvas");
-  c.width=32;c.height=32;
-  const x=c.getContext("2d");
-  const bits=patternBits[index];
-  x.fillStyle="#fff";
-  x.fillRect(0,0,32,32);
-  x.fillStyle="#000";
-  for(let y=0;y<8;y++){
-    for(let xx=0;xx<8;xx++){
-      if(bits[y*8+xx])x.fillRect(xx*4,y*4,4,4);
-    }
-  }
-  return c;
-}
-
-function buildPatternRamp(){
-  patternGrid.innerHTML="";
-  sortedPatternIndices.forEach(index=>{
-    const button=document.createElement("button");
-    button.className="pattern";
-    button.type="button";
-    button.title="Patrón "+(index+1);
-    button.dataset.index=index;
-    button.appendChild(makePatternPreview(index));
-    button.onclick=()=>{
-      const active=enabledPatterns.filter(Boolean).length;
-      if(enabledPatterns[index]&&active===1)return;
-      enabledPatterns[index]=!enabledPatterns[index];
-      button.classList.toggle("off",!enabledPatterns[index]);
-      scheduleRender();
-    };
-    patternGrid.appendChild(button);
-  });
-}
+let renderTimer=0;
+let renderVersion=0;
 
 function clamp(v){return Math.max(0,Math.min(255,v));}
 
@@ -98,207 +48,269 @@ function hexToRgb(hex){
   return [(n>>16)&255,(n>>8)&255,n&255];
 }
 
-function blurGray(input,w,h,amount){
+function parsePatterns(){
+  patternBits=[];
+  patternDensity=[];
+
+  for(let p=0;p<38;p++){
+    const bits=[];
+    for(let wordIndex=0;wordIndex<4;wordIndex++){
+      const word=parseInt(PATTERN_WORDS[p*4+wordIndex],16);
+      for(let bit=15;bit>=0;bit--)bits.push((word>>bit)&1);
+    }
+    patternBits.push(bits);
+    patternDensity.push(bits.reduce((sum,v)=>sum+v,0)/64);
+  }
+}
+
+function buildPatternRamp(){
+  const order=[...Array(38).keys()].sort((a,b)=>patternDensity[a]-patternDensity[b]);
+  patternGrid.innerHTML="";
+
+  for(const index of order){
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="pattern";
+    button.title="Patrón "+(index+1);
+
+    const c=document.createElement("canvas");
+    c.width=32;
+    c.height=32;
+    const pctx=c.getContext("2d");
+    pctx.fillStyle="#fff";
+    pctx.fillRect(0,0,32,32);
+    pctx.fillStyle="#000";
+
+    const bits=patternBits[index];
+    for(let y=0;y<8;y++){
+      for(let x=0;x<8;x++){
+        if(bits[y*8+x])pctx.fillRect(x*4,y*4,4,4);
+      }
+    }
+
+    button.appendChild(c);
+    button.onclick=()=>{
+      const active=enabledPatterns.filter(Boolean).length;
+      if(enabledPatterns[index]&&active===1)return;
+      enabledPatterns[index]=!enabledPatterns[index];
+      button.classList.toggle("off",!enabledPatterns[index]);
+      scheduleRender();
+    };
+
+    patternGrid.appendChild(button);
+  }
+}
+
+function blurSmall(input,w,h,amount){
   if(amount<=0)return input;
-  const radius=Math.max(1,Math.round(amount*3));
-  const temp=new Float32Array(input.length);
+
+  const radius=Math.max(1,Math.round(amount*2));
+  const tmp=new Float32Array(input.length);
   const out=new Float32Array(input.length);
 
   for(let y=0;y<h;y++){
-    let sum=0;
-    for(let x=-radius;x<=radius;x++){
-      sum+=input[y*w+Math.max(0,Math.min(w-1,x))];
-    }
     for(let x=0;x<w;x++){
-      temp[y*w+x]=sum/(radius*2+1);
-      const remove=x-radius;
-      const add=x+radius+1;
-      sum-=input[y*w+Math.max(0,Math.min(w-1,remove))];
-      sum+=input[y*w+Math.max(0,Math.min(w-1,add))];
+      let sum=0,count=0;
+      for(let dx=-radius;dx<=radius;dx++){
+        const xx=Math.max(0,Math.min(w-1,x+dx));
+        sum+=input[y*w+xx];
+        count++;
+      }
+      tmp[y*w+x]=sum/count;
     }
   }
 
-  for(let x=0;x<w;x++){
-    let sum=0;
-    for(let y=-radius;y<=radius;y++)sum+=temp[Math.max(0,Math.min(h-1,y))*w+x];
-    for(let y=0;y<h;y++){
-      out[y*w+x]=sum/(radius*2+1);
-      const remove=y-radius;
-      const add=y+radius+1;
-      sum-=temp[Math.max(0,Math.min(h-1,remove))*w+x];
-      sum+=temp[Math.max(0,Math.min(h-1,add))*w+x];
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let sum=0,count=0;
+      for(let dy=-radius;dy<=radius;dy++){
+        const yy=Math.max(0,Math.min(h-1,y+dy));
+        sum+=tmp[yy*w+x];
+        count++;
+      }
+      out[y*w+x]=sum/count;
     }
   }
+
   return out;
 }
 
-function sharpenGray(input,w,h,amount){
+function sharpenSmall(input,w,h,amount){
   if(amount===0)return input;
-  const blur=blurGray(input,w,h,Math.min(1,Math.abs(amount)/100));
+
+  const blur=blurSmall(input,w,h,1);
   const out=new Float32Array(input.length);
   const strength=amount/100;
+
   for(let i=0;i<input.length;i++){
-    if(strength>0)out[i]=clamp(input[i]+(input[i]-blur[i])*(strength*1.8));
-    else out[i]=clamp(input[i]*(1+strength)+blur[i]*(-strength));
+    out[i]=strength>0
+      ? clamp(input[i]+(input[i]-blur[i])*1.5*strength)
+      : clamp(input[i]*(1+strength)+blur[i]*(-strength));
   }
+
   return out;
 }
 
 function addGrain(input,amount){
   if(amount<=0)return input;
+
   const out=new Float32Array(input.length);
-  const strength=amount*0.55;
+  const strength=amount*.75;
+
   for(let i=0;i<input.length;i++){
-    const noise=(Math.random()*2-1)*strength;
-    out[i]=clamp(input[i]+noise);
+    out[i]=clamp(input[i]+(Math.random()*2-1)*strength);
   }
+
   return out;
 }
 
 function applyContrast(input,amount){
   if(amount===0)return input;
-  const out=new Float32Array(input.length);
-  const c=(amount/100)+1;
-  for(let i=0;i<input.length;i++){
-    out[i]=clamp((input[i]-128)*c+128);
-  }
-  return out;
-}
 
-function sampleGrayscale(data,w,h,cx,cy,cellW,cellH){
-  const x0=Math.max(0,Math.floor(cx*cellW));
-  const x1=Math.min(w,Math.max(x0+1,Math.ceil((cx+1)*cellW)));
-  const y0=Math.max(0,Math.floor(cy*cellH));
-  const y1=Math.min(h,Math.max(y0+1,Math.ceil((cy+1)*cellH)));
-  let sum=0,count=0;
-  for(let y=y0;y<y1;y++){
-    for(let x=x0;x<x1;x++){
-      sum+=0.2126*data[(y*w+x)*4]+0.7152*data[(y*w+x)*4+1]+0.0722*data[(y*w+x)*4+2];
-      count++;
-    }
+  const out=new Float32Array(input.length);
+  const factor=1+amount/100;
+
+  for(let i=0;i<input.length;i++){
+    out[i]=clamp((input[i]-128)*factor+128);
   }
-  return count?sum/count:255;
+
+  return out;
 }
 
 function pickPattern(tone){
   const target=1-tone/255;
-  let bestIndex=sortedPatternIndices[0];
-  let best=Infinity;
+  let best=0;
+  let distance=Infinity;
 
-  for(const index of sortedPatternIndices){
-    if(!enabledPatterns[index])continue;
-    const d=Math.abs(patternDensity[index]-target);
-    if(d<best){
-      best=d;
-      bestIndex=index;
+  for(let i=0;i<38;i++){
+    if(!enabledPatterns[i])continue;
+    const d=Math.abs(patternDensity[i]-target);
+    if(d<distance){
+      distance=d;
+      best=i;
     }
   }
 
-  return bestIndex;
-}
-
-function buildLowResGrayscale(data,w,h,cellW,cellH){
-  const cols=Math.ceil(w/cellW);
-  const rows=Math.ceil(h/cellH);
-  const small=new Float32Array(cols*rows);
-
-  for(let cy=0;cy<rows;cy++){
-    for(let cx=0;cx<cols;cx++){
-      small[cy*cols+cx]=sampleGrayscale(data,w,h,cx,cy,cellW,cellH);
-    }
-  }
-  return {small,cols,rows};
+  return best;
 }
 
 function render(){
   if(!image||!sourceData)return;
 
-  const id=++render._id;
-  const max=MAX_SIDE;
-  const w=Math.min(image.naturalWidth,max);
-  const h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
+  const myVersion=++renderVersion;
+  const sourceW=canvas.width;
+  const sourceH=canvas.height;
 
-  if(canvas.width!==w||canvas.height!==h){
-    canvas.width=w;
-    canvas.height=h;
+  const longer=Math.max(sourceW,sourceH);
+  const requested=Math.max(24,Math.min(320,Number(bitmapWidth.value)));
+
+  let cols,rows;
+  if(sourceW>=sourceH){
+    cols=requested;
+    rows=Math.max(1,Math.round(requested*sourceH/sourceW));
+  }else{
+    rows=requested;
+    cols=Math.max(1,Math.round(requested*sourceW/sourceH));
   }
 
-  const widthCells=Math.max(8,Math.min(Number(bitmapWidth.value),Math.max(8,Math.round(Math.max(w,h)))));
-  const cell=Math.max(1,Math.max(w,h)/widthCells);
-  const cellW=cell;
-  const cellH=cell;
+  const small=document.createElement("canvas");
+  small.width=cols;
+  small.height=rows;
+
+  const sctx=small.getContext("2d",{willReadFrequently:true});
+  sctx.imageSmoothingEnabled=true;
+  sctx.drawImage(sourceCanvas,0,0,cols,rows);
+
+  const pixels=sctx.getImageData(0,0,cols,rows).data;
+  let tone=new Float32Array(cols*rows);
+
+  for(let i=0,p=0;i<pixels.length;i+=4,p++){
+    tone[p]=.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2];
+  }
+
   const smoothAmount=Number(smooth.value)/100;
   const sharpenAmount=Number(sharpen.value);
   const grainAmount=Number(grain.value);
   const contrastAmount=Number(contrast.value);
-  const thresholdAmount=Number(threshold.value)/100;
-  const selectedEdge=edge.value;
+  const thresholdAmount=Number(threshold.value)*2.55;
+
+  if(smoothAmount>0)tone=blurSmall(tone,cols,rows,smoothAmount);
+  if(sharpenAmount!==0)tone=sharpenSmall(tone,cols,rows,sharpenAmount);
+  if(contrastAmount!==0)tone=applyContrast(tone,contrastAmount);
+  if(grainAmount>0)tone=addGrain(tone,grainAmount);
+
+  const edgeMode=edge.value;
   const edgeStrength=Number(edgeAmount.value)/100;
-  const blendAmount=Number(blend.value)/100;
 
-  let toneData=buildLowResGrayscale(sourceData,w,h,cellW,cellH);
-  let small=toneData.small;
-
-  if(smoothAmount>0)small=blurGray(small,toneData.cols,toneData.rows,smoothAmount);
-  if(sharpenAmount!==0)small=sharpenGray(small,toneData.cols,toneData.rows,sharpenAmount);
-  if(contrastAmount!==0)small=applyContrast(small,contrastAmount);
-  if(grainAmount>0)small=addGrain(small,grainAmount);
-
-  const out=new Uint8ClampedArray(sourceData);
   const inkRgb=hexToRgb(ink.value);
   const paperRgb=hexToRgb(paper.value);
+  const blendAmount=Number(blend.value)/100;
 
-  for(let cy=0;cy<toneData.rows;cy++){
-    for(let cx=0;cx<toneData.cols;cx++){
-      let tone=small[cy*toneData.cols+cx];
+  const out=new Uint8ClampedArray(sourceData.length);
 
-      tone=clamp(tone+(thresholdAmount*255));
-      let edgeValue=0;
+  // Start from paper, then stamp the selected 8x8 pattern into each cell.
+  for(let i=0;i<out.length;i+=4){
+    out[i]=paperRgb[0];
+    out[i+1]=paperRgb[1];
+    out[i+2]=paperRgb[2];
+    out[i+3]=sourceData[i+3];
+  }
 
-      if(selectedEdge!=="off"){
-        const left=small[cy*toneData.cols+Math.max(0,cx-1)];
-        const right=small[cy*toneData.cols+Math.min(toneData.cols-1,cx+1)];
-        const up=small[Math.max(0,cy-1)*toneData.cols+cx];
-        const down=small[Math.min(toneData.rows-1,cy+1)*toneData.cols+cx];
-        edgeValue=Math.min(255,Math.hypot(right-left,down-up)*1.6);
+  for(let cy=0;cy<rows;cy++){
+    for(let cx=0;cx<cols;cx++){
+      let value=clamp(tone[cy*cols+cx]+thresholdAmount);
+
+      if(edgeMode!=="off"){
+        const left=tone[cy*cols+Math.max(0,cx-1)];
+        const right=tone[cy*cols+Math.min(cols-1,cx+1)];
+        const up=tone[Math.max(0,cy-1)*cols+cx];
+        const down=tone[Math.min(rows-1,cy+1)*cols+cx];
+        const edgeValue=Math.min(255,Math.hypot(right-left,down-up)*1.7);
+
+        if(edgeMode==="shade")value=clamp(value-edgeValue*edgeStrength);
       }
 
-      if(selectedEdge==="shade")tone=clamp(tone-edgeValue*edgeStrength);
-      const patternIndex=pickPattern(tone);
+      const patternIndex=pickPattern(value);
       const bits=patternBits[patternIndex];
 
-      const x0=Math.floor(cx*cellW);
-      const x1=Math.min(w,Math.max(x0+1,Math.ceil((cx+1)*cellW)));
-      const y0=Math.floor(cy*cellH);
-      const y1=Math.min(h,Math.max(y0+1,Math.ceil((cy+1)*cellH)));
+      const x0=Math.floor(cx*sourceW/cols);
+      const x1=Math.min(sourceW,Math.max(x0+1,Math.ceil((cx+1)*sourceW/cols)));
+      const y0=Math.floor(cy*sourceH/rows);
+      const y1=Math.min(sourceH,Math.max(y0+1,Math.ceil((cy+1)*sourceH/rows)));
 
       for(let y=y0;y<y1;y++){
-        const py=Math.min(7,Math.floor(((y-y0)/(y1-y0))*8));
+        const py=Math.min(7,Math.floor((y-y0)*8/(y1-y0)));
+
         for(let x=x0;x<x1;x++){
-          const px=Math.min(7,Math.floor(((x-x0)/(x1-x0))*8));
+          const px=Math.min(7,Math.floor((x-x0)*8/(x1-x0)));
           let isInk=bits[py*8+px]===1;
 
-          if(selectedEdge==="ink"&&edgeValue>0){
-            const edgeMask=Math.min(1,edgeValue/80)*edgeStrength;
-            if(edgeMask>0.5)isInk=true;
+          if(edgeMode==="ink"){
+            const left=tone[cy*cols+Math.max(0,cx-1)];
+            const right=tone[cy*cols+Math.min(cols-1,cx+1)];
+            const up=tone[Math.max(0,cy-1)*cols+cx];
+            const down=tone[Math.min(rows-1,cy+1)*cols+cx];
+            const edgeValue=Math.min(255,Math.hypot(right-left,down-up)*1.7);
+            if(edgeValue*edgeStrength>70)isInk=true;
           }
 
-          const i=(y*w+x)*4;
+          const i=(y*sourceW+x)*4;
           const target=isInk?inkRgb:paperRgb;
-          const b=blendAmount;
-          out[i]=Math.round(sourceData[i]*(1-b)+target[0]*b);
-          out[i+1]=Math.round(sourceData[i+1]*(1-b)+target[1]*b);
-          out[i+2]=Math.round(sourceData[i+2]*(1-b)+target[2]*b);
+
+          out[i]=Math.round(target[0]*blendAmount+sourceData[i]*(1-blendAmount));
+          out[i+1]=Math.round(target[1]*blendAmount+sourceData[i+1]*(1-blendAmount));
+          out[i+2]=Math.round(target[2]*blendAmount+sourceData[i+2]*(1-blendAmount));
           out[i+3]=sourceData[i+3];
         }
       }
     }
+
+    if(myVersion!==renderVersion)return;
   }
 
-  if(id!==render._id)return;
+  ctx.putImageData(new ImageData(out,sourceW,sourceH),0,0);
 
-  ctx.putImageData(new ImageData(out,w,h),0,0);
-  bitmapWidthValue.textContent=widthCells;
+  bitmapWidthValue.textContent=requested;
   thresholdValue.textContent=(Number(threshold.value)>0?"+":"")+threshold.value+"%";
   contrastValue.textContent=(Number(contrast.value)>0?"+":"")+contrast.value+"%";
   grainValue.textContent=grain.value+"%";
@@ -313,61 +325,93 @@ function render(){
   reset.disabled=false;
 }
 
-render._id=0;
-let timer=0;
 function scheduleRender(){
-  if(timer)clearTimeout(timer);
-  timer=setTimeout(()=>{
-    timer=0;
-    render();
-  },35);
+  if(!image)return;
+
+  if(renderTimer)clearTimeout(renderTimer);
+  renderTimer=setTimeout(()=>{
+    renderTimer=0;
+    requestAnimationFrame(render);
+  },25);
 }
 
 function load(file){
   if(!file||!file.type.startsWith("image/"))return;
+
   if(objectUrl)URL.revokeObjectURL(objectUrl);
   objectUrl=URL.createObjectURL(file);
+
   const img=new Image();
 
   img.onload=()=>{
-    image=img;
-    sourceCanvas=document.createElement("canvas");
-    const scale=Math.min(1,MAX_SIDE/Math.max(img.naturalWidth,img.naturalHeight));
-    const w=Math.max(1,Math.round(img.naturalWidth*scale));
-    const h=Math.max(1,Math.round(img.naturalHeight*scale));
-    sourceCanvas.width=w;
-    sourceCanvas.height=h;
-    sourceCtx=sourceCanvas.getContext("2d",{willReadFrequently:true});
-    sourceCtx.drawImage(img,0,0,w,h);
-    sourceData=new Uint8ClampedArray(sourceCtx.getImageData(0,0,w,h).data);
-    fileName.textContent=file.name+" · Procesado en tu navegador.";
-    render();
+    try{
+      const scale=Math.min(1,MAX_SIDE/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.max(1,Math.round(img.naturalWidth*scale));
+      const h=Math.max(1,Math.round(img.naturalHeight*scale));
+
+      canvas.width=w;
+      canvas.height=h;
+
+      sourceCanvas=document.createElement("canvas");
+      sourceCanvas.width=w;
+      sourceCanvas.height=h;
+      sourceCtx=sourceCanvas.getContext("2d",{willReadFrequently:true});
+      sourceCtx.drawImage(img,0,0,w,h);
+      sourceData=new Uint8ClampedArray(sourceCtx.getImageData(0,0,w,h).data);
+
+      image=img;
+      fileName.textContent=file.name+" · Procesado en tu navegador.";
+
+      render();
+    }catch(error){
+      console.error("MacPaint load:",error);
+      image=null;
+    }
+  };
+
+  img.onerror=()=>{
+    console.error("MacPaint: no se pudo cargar la imagen.");
   };
 
   img.src=objectUrl;
 }
 
 fileInput.onchange=()=>load(fileInput.files[0]);
-[bitmapWidth,threshold,contrast,grain,smooth,sharpen,edgeAmount,blend].forEach(el=>el.addEventListener("input",scheduleRender));
+
+[bitmapWidth,threshold,contrast,grain,smooth,sharpen,edgeAmount,blend].forEach(input=>{
+  input.addEventListener("input",scheduleRender);
+});
+
 edge.addEventListener("change",scheduleRender);
 ink.addEventListener("input",scheduleRender);
 paper.addEventListener("input",scheduleRender);
 
-["dragenter","dragover"].forEach(name=>dropZone.addEventListener(name,e=>{
-  e.preventDefault();
-  dropZone.classList.add("dragging");
-}));
-["dragleave","drop"].forEach(name=>dropZone.addEventListener(name,e=>{
-  e.preventDefault();
-  dropZone.classList.remove("dragging");
-}));
-dropZone.onclick=e=>{
-  if(e.target!==fileInput)fileInput.click();
+["dragenter","dragover"].forEach(name=>{
+  dropZone.addEventListener(name,event=>{
+    event.preventDefault();
+    dropZone.classList.add("dragging");
+  });
+});
+
+["dragleave","drop"].forEach(name=>{
+  dropZone.addEventListener(name,event=>{
+    event.preventDefault();
+    dropZone.classList.remove("dragging");
+  });
+});
+
+dropZone.onclick=event=>{
+  if(event.target!==fileInput)fileInput.click();
 };
-dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
+
+dropZone.ondrop=event=>{
+  const file=event.dataTransfer.files&&event.dataTransfer.files[0];
+  if(file)load(file);
+};
 
 download.onclick=()=>{
   if(!canvas.width||!canvas.height)return;
+
   const a=document.createElement("a");
   a.download="macpaint.png";
   a.href=canvas.toDataURL("image/png");
@@ -379,12 +423,22 @@ reset.onclick=()=>{
   sourceCanvas=null;
   sourceCtx=null;
   sourceData=null;
-  if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=null}
+  renderVersion++;
+
+  if(renderTimer)clearTimeout(renderTimer);
+  renderTimer=0;
+
+  if(objectUrl){
+    URL.revokeObjectURL(objectUrl);
+    objectUrl=null;
+  }
+
   fileInput.value="";
   canvas.hidden=true;
   placeholder.hidden=false;
   download.disabled=true;
   reset.disabled=true;
+
   bitmapWidth.value=128;
   threshold.value=0;
   contrast.value=0;
@@ -396,9 +450,11 @@ reset.onclick=()=>{
   blend.value=100;
   ink.value="#000000";
   paper.value="#ffffff";
+
   enabledPatterns.fill(true);
-  document.querySelectorAll(".pattern").forEach(x=>x.classList.remove("off"));
+  document.querySelectorAll(".pattern").forEach(button=>button.classList.remove("off"));
   fileName.textContent="Ninguna imagen seleccionada · Procesado en tu navegador.";
+
   updateLabels();
 };
 
@@ -413,5 +469,6 @@ function updateLabels(){
   blendValue.textContent=blend.value+"%";
 }
 
+parsePatterns();
 buildPatternRamp();
 updateLabels();
