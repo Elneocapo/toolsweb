@@ -32,7 +32,7 @@ function applyLumaCompression(original,compressed){
 function makeWorker(){
   if(!window.Worker||!window.OffscreenCanvas||!window.createImageBitmap)return null;
 
-  const code=\`
+  const code=`
 let original=null,w=0,h=0,grayCanvas=null,grayCtx=null,decodeCanvas=null,decodeCtx=null;
 
 const clamp=v=>Math.max(0,Math.min(255,v));
