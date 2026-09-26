@@ -277,7 +277,7 @@
     state=null;
     if(tool){
       tool.download.textContent=tool.normalDownloadLabel;
-      tool.download.disabled=false;
+      tool.download.disabled=true;
     }
   }
 
