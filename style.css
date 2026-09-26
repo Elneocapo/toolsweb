@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700;800&display=swap');
 
-:root{--background:#160F14;--surface:#24171D;--surface-hover:#854D4D;--text:#F5E9E9;--surface-text:#F5E9E9;--muted:#C38D94;--border:#4A2932;--accent:#C38D94}
+:root{--background:#170F15;--surface:#24171D;--surface-hover:#854D4D;--text:#F5E9E9;--surface-text:#F5E9E9;--muted:#C38D94;--border:#4A2932;--accent:#C38D94}
 
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
