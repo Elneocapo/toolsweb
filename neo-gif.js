@@ -269,6 +269,18 @@
     encoder.render();
   }
 
+  function clearGifState(){
+    generation++;
+    if(animationTimer)clearTimeout(animationTimer);
+    animationTimer=0;
+    if(state&&state.processTimer)clearTimeout(state.processTimer);
+    state=null;
+    if(tool){
+      tool.download.textContent=tool.normalDownloadLabel;
+      tool.download.disabled=false;
+    }
+  }
+
   function register(config){
     tool=Object.assign({
       maxSide:1000,
@@ -282,6 +294,8 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         startGif(file);
+      }else{
+        clearGifState();
       }
     },true);
 
@@ -291,6 +305,8 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         startGif(file);
+      }else{
+        clearGifState();
       }
     },true);
 
