@@ -13,10 +13,10 @@ a{color:inherit;text-decoration:none}
 .navbar nav a{font-size:9px;font-weight:800;letter-spacing:1px;color:var(--muted);transition:.2s}
 .navbar nav a:hover{color:var(--text)}
 
-.hero{min-height:calc(82vh - 52px);padding:4vw 3vw;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid var(--border)}
+.hero{min-height:calc(78vh - 52px);padding:4vw 3vw;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid var(--border)}
 .hero-label{color:var(--muted);font-size:9px;font-weight:800;letter-spacing:2px;margin-bottom:15px}
-.hero h1{font-family:"Archivo Black",sans-serif;font-size:clamp(54px,9vw,140px);line-height:.82;letter-spacing:-6px;max-width:950px}
-.hero p{max-width:500px;margin-top:22px;color:var(--muted);font-size:14px;line-height:1.5}
+.hero h1{font-family:"Archivo Black",sans-serif;font-size:clamp(42px,5.5vw,82px);line-height:.84;letter-spacing:-4px;max-width:700px}
+.hero p{max-width:500px;margin-top:20px;color:var(--muted);font-size:14px;line-height:1.5}
 .hero-button{display:inline-flex;align-items:center;width:fit-content;margin-top:18px;padding:10px 14px;border:1px solid #444;background:transparent;color:var(--text);font-size:9px;font-weight:800;letter-spacing:1px;transition:.2s}
 .hero-button:hover{background:var(--text);color:#080808}
 
@@ -46,8 +46,8 @@ footer{padding:24px 3vw;border-top:1px solid var(--border);display:flex;justify-
   .navbar{height:52px;padding:0 14px}
   .navbar nav{gap:11px}
   .navbar nav a{font-size:8px;letter-spacing:.7px}
-  .hero{min-height:calc(78vh - 52px);padding:42px 14px}
-  .hero h1{font-size:19vw;letter-spacing:-3px}
+  .hero{min-height:70vh;padding:38px 14px}
+  .hero h1{font-size:13vw;letter-spacing:-2px}
   .hero p{font-size:14px}
   .tools-section{padding:45px 14px}
   .tools-grid{grid-template-columns:1fr}
