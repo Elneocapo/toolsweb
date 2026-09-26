@@ -124,7 +124,7 @@ resetBtn.addEventListener("click", () => {
   setStatus("Listo para otra imagen.");
 });
 window.NeoGif.register({
-  fileInput,dropZone,download:downloadBtn,reset:resetBtn,canvas,ctx,placeholder,fileName,maxSide:1400,
+  fileInput,dropZone,download:downloadBtn,reset:resetBtn,canvas,ctx,placeholder,fileName,maxSide:1400,gifMaxSide:640,gifMaxSide:640,
   renderFrame(frame){
     const previous=sourceImage;
     frame.naturalWidth=frame.width;
