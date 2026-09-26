@@ -27,7 +27,7 @@
 <div><div class="hero-label">TOOL 001 · IMÁGENES</div><h1>PIXELAR<br>IMAGEN</h1></div>
 <p>Sube una imagen y ajusta el pixelado en tiempo real. La descarga será exactamente igual a la vista previa.</p>
 </section>
-<div class="drop-zone" id="dropZone"><input id="fileInput" type="file" accept="image/*"><div class="drop-inner"><strong>SUBE TU IMAGEN</strong><span>Haz clic para elegir un archivo o arrástralo aquí</span></div></div>
+<div class="drop-zone" id="dropZone"><input id="fileInput" type="file" accept="image/*,.gif"><div class="drop-inner"><strong>SUBE TU IMAGEN</strong><span>Haz clic para elegir un archivo o arrástralo aquí · GIF incluido</span></div></div>
 <div class="preview-wrap" id="previewWrap"><div class="canvas-placeholder" id="canvasPlaceholder">LA VISTA PREVIA APARECERÁ AQUÍ</div><canvas id="previewCanvas" hidden></canvas></div>
 <div class="controls">
 <div><div class="control-label"><span>NIVEL DE PIXELADO</span><span id="pixelValue">12 px</span></div><input id="pixelSlider" type="range" min="2" max="80" value="12" step="1" aria-label="Nivel de pixelado"></div>
@@ -35,6 +35,6 @@
 </div>
 <div class="file-info"><span id="fileName">Ninguna imagen seleccionada</span><span id="status" aria-live="polite">Todo se procesa en tu navegador.</span></div>
 </main>
-<script src="pixelar-imagen.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct.min.js"></script><script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script><script src="neo-gif.js?v=1"></script><script src="pixelar-imagen.js"></script>
 </body>
 </html>
