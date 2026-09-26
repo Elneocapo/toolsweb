@@ -1,5 +1,5 @@
-const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),size=document.getElementById("size"),threshold=document.getElementById("threshold"),method=document.getElementById("method"),sizeValue=document.getElementById("sizeValue"),thresholdValue=document.getElementById("thresholdValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
-let image=null,url=null;
+const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),size=document.getElementById("size"),quality=document.getElementById("quality"),qualityControl=document.getElementById("qualityControl"),threshold=document.getElementById("threshold"),method=document.getElementById("method"),sizeValue=document.getElementById("sizeValue"),thresholdValue=document.getElementById("thresholdValue"),qualityValue=document.getElementById("qualityValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
+let image=null,url=null,renderId=0;
 function luminance(r,g,b){return r*.2126+g*.7152+b*.0722}
 function processBitmap(data,w,h,cell,cut){
   const out=new Uint8ClampedArray(data.length);
@@ -26,10 +26,23 @@ function processError(data,w,h,cell,cut,type){
   for(let by=0;by<sh;by++)for(let bx=0;bx<sw;bx++){const v=gray[by*sw+bx]>=128?255:0;for(let y=by*cell;y<Math.min((by+1)*cell,h);y++)for(let x=bx*cell;x<Math.min((bx+1)*cell,w);x++){const i=(y*w+x)*4;out[i]=out[i+1]=out[i+2]=v;out[i+3]=data[i+3]}}
   return out;
 }
+function renderJpeg(w,h,id){
+  const temp=document.createElement("canvas");temp.width=w;temp.height=h;
+  const tc=temp.getContext("2d");tc.drawImage(image,0,0,w,h);
+  const q=+quality.value/100;
+  temp.toBlob(blob=>{
+    if(!blob||id!==renderId)return;
+    const u=URL.createObjectURL(blob),img=new Image();
+    img.onload=()=>{if(id===renderId){ctx.clearRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(u);qualityValue.textContent=quality.value+"%";placeholder.hidden=true;canvas.hidden=false;download.disabled=false;reset.disabled=false}};
+    img.src=u;
+  },"image/jpeg",q);
+}
 function render(){
  if(!image)return;
+ const id=++renderId;
  const max=1400,w=Math.min(image.naturalWidth,max),h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
  canvas.width=w;canvas.height=h;ctx.drawImage(image,0,0,w,h);
+ if(method.value==="jpeg"){renderJpeg(w,h,id);sizeValue.textContent=+size.value+" px";thresholdValue.textContent=threshold.value+"%";qualityValue.textContent=quality.value+"%";return;}
  const src=ctx.getImageData(0,0,w,h),cut=+threshold.value*2.55,cell=+size.value;
  let out;
  if(method.value==="bitmap")out=processBitmap(src.data,w,h,cell,cut);
@@ -39,7 +52,7 @@ function render(){
  sizeValue.textContent=cell+" px";thresholdValue.textContent=threshold.value+"%";placeholder.hidden=true;canvas.hidden=false;download.disabled=false;reset.disabled=false;
 }
 function load(file){if(!file||!file.type.startsWith("image/"))return;if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(file);const img=new Image();img.onload=()=>{image=img;fileName.textContent=file.name+" · Procesado en tu navegador.";render()};img.src=url}
-fileInput.onchange=()=>load(fileInput.files[0]);size.oninput=render;threshold.oninput=render;method.onchange=render;
+fileInput.onchange=()=>load(fileInput.files[0]);size.oninput=render;threshold.oninput=render;quality.oninput=render;method.onchange=()=>{qualityControl.hidden=method.value!=="jpeg";render()};
 ["dragenter","dragover"].forEach(e=>dropZone.addEventListener(e,x=>{x.preventDefault();dropZone.classList.add("dragging")}));
 ["dragleave","drop"].forEach(e=>dropZone.addEventListener(e,x=>{x.preventDefault();dropZone.classList.remove("dragging")}));
 dropZone.onclick=e=>{if(e.target!==fileInput)fileInput.click()};dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
