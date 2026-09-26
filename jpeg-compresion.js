@@ -1,70 +1,76 @@
 const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),compression=document.getElementById("compression"),compressionValue=document.getElementById("compressionValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
 let image=null,url=null,renderId=0,latestBlob=null;
 
-function jpegQuality(c){
-  const x=c/100;
-  // Calidad invertida y muy agresiva al final del recorrido.
-  // 0% = prácticamente sin pérdida; 100% = cuantización JPEG extrema.
-  return Math.max(.008,Math.pow(1-x,2.35));
+function qualityFromCompression(value){
+  // 0% = JPEG de máxima calidad.
+  // 100% = JPEG extremadamente comprimido.
+  const x=value/100;
+  return Math.max(0.01,1-Math.pow(x,2.15)*0.99);
 }
 
-function jpegPass(source,quality){
+function encodeJpeg(source,quality){
   return new Promise(resolve=>{
-    source.toBlob(blob=>{
-      if(!blob){resolve(null);return}
-      const objectUrl=URL.createObjectURL(blob);
-      const img=new Image();
-      img.onload=()=>{
-        URL.revokeObjectURL(objectUrl);
-        const out=document.createElement("canvas");
-        out.width=source.width;
-        out.height=source.height;
-        out.getContext("2d").drawImage(img,0,0,out.width,out.height);
-        resolve(out);
-      };
-      img.src=objectUrl;
-    },"image/jpeg",quality);
+    source.toBlob(blob=>resolve(blob),"image/jpeg",quality);
+  });
+}
+
+function blobToCanvas(blob,width,height){
+  return new Promise(resolve=>{
+    const objectUrl=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(objectUrl);
+      const out=document.createElement("canvas");
+      out.width=width;
+      out.height=height;
+      const outCtx=out.getContext("2d");
+      outCtx.drawImage(img,0,0,width,height);
+      resolve(out);
+    };
+    img.src=objectUrl;
   });
 }
 
 async function render(){
   if(!image)return;
+
   const id=++renderId;
-  const w=Math.min(image.naturalWidth,1600);
-  const h=Math.max(1,Math.round(image.naturalHeight*w/image.naturalWidth));
-  canvas.width=w;
-  canvas.height=h;
+  const width=Math.min(image.naturalWidth,1600);
+  const height=Math.max(1,Math.round(image.naturalHeight*width/image.naturalWidth));
 
-  const c=+compression.value;
-  compressionValue.textContent=c+"%";
+  canvas.width=width;
+  canvas.height=height;
 
-  const base=document.createElement("canvas");
-  base.width=w;
-  base.height=h;
-  base.getContext("2d").drawImage(image,0,0,w,h);
+  const value=Number(compression.value);
+  compressionValue.textContent=value+"%";
 
-  const quality=jpegQuality(c);
+  const source=document.createElement("canvas");
+  source.width=width;
+  source.height=height;
+  source.getContext("2d").drawImage(image,0,0,width,height);
 
-  // Re-codificamos el JPEG varias veces en los niveles altos.
-  // Sigue siendo compresión JPEG real: cada pasada usa el encoder JPEG
-  // del navegador y vuelve a decodificar el resultado antes de la siguiente.
-  const passes=c<35?1:c<65?2:c<82?3:4;
-  let current=base;
+  // La vista previa se obtiene del JPEG codificado, no de un filtro.
+  // En los niveles altos hacemos varias generaciones JPEG para que la
+  // pérdida acumulada sea claramente visible.
+  const quality=qualityFromCompression(value);
+  let current=source;
+  const generations=value===0?1:value<45?1:value<70?2:value<88?3:5;
 
-  for(let i=0;i<passes;i++){
+  for(let i=0;i<generations;i++){
     if(id!==renderId)return;
-    const passQuality=Math.max(.008,quality*(1-(i*.12)));
-    current=await jpegPass(current,passQuality);
-    if(!current||id!==renderId)return;
+    const generationQuality=Math.max(0.01,quality*(1-i*0.08));
+    const blob=await encodeJpeg(current,generationQuality);
+    if(!blob||id!==renderId)return;
+    current=await blobToCanvas(blob,width,height);
   }
 
   if(id!==renderId)return;
 
-  ctx.clearRect(0,0,w,h);
-  ctx.drawImage(current,0,0,w,h);
+  ctx.clearRect(0,0,width,height);
+  ctx.drawImage(current,0,0,width,height);
 
-  // El blob descargable es exactamente la última codificación JPEG.
-  latestBlob=await new Promise(resolve=>current.toBlob(resolve,"image/jpeg",quality));
+  // Descargar exactamente la versión JPEG que se está previsualizando.
+  latestBlob=await encodeJpeg(current,Math.max(0.01,quality));
   if(id!==renderId)return;
 
   placeholder.hidden=true;
@@ -91,28 +97,34 @@ function load(file){
 fileInput.onchange=()=>load(fileInput.files[0]);
 compression.oninput=render;
 
-["dragenter","dragover"].forEach(e=>dropZone.addEventListener(e,x=>{
-  x.preventDefault();
-  dropZone.classList.add("dragging");
-}));
+["dragenter","dragover"].forEach(eventName=>{
+  dropZone.addEventListener(eventName,event=>{
+    event.preventDefault();
+    dropZone.classList.add("dragging");
+  });
+});
 
-["dragleave","drop"].forEach(e=>dropZone.addEventListener(e,x=>{
-  x.preventDefault();
-  dropZone.classList.remove("dragging");
-}));
+["dragleave","drop"].forEach(eventName=>{
+  dropZone.addEventListener(eventName,event=>{
+    event.preventDefault();
+    dropZone.classList.remove("dragging");
+  });
+});
 
-dropZone.onclick=e=>{
-  if(e.target!==fileInput)fileInput.click();
+dropZone.onclick=event=>{
+  if(event.target!==fileInput)fileInput.click();
 };
 
-dropZone.ondrop=e=>load(e.dataTransfer.files[0]);
+dropZone.ondrop=event=>load(event.dataTransfer.files[0]);
 
 download.onclick=()=>{
   if(!latestBlob)return;
+
   const a=document.createElement("a");
   a.download="jpeg-compresion.jpg";
   a.href=URL.createObjectURL(latestBlob);
   a.click();
+
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
@@ -125,7 +137,7 @@ reset.onclick=()=>{
   placeholder.hidden=false;
   download.disabled=true;
   reset.disabled=true;
-  compression.value=50;
-  compressionValue.textContent="50%";
+  compression.value=0;
+  compressionValue.textContent="0%";
   fileName.textContent="Ninguna imagen seleccionada · Procesado en tu navegador.";
 };
