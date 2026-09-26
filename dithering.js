@@ -482,3 +482,25 @@ reset.onclick=()=>{
 };
 
 updateLabels();
+
+window.NeoGif.register({
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIZE,
+  renderFrame(frame){
+    const previousImage=image;
+    const previousPaletteKey=paletteCacheKey;
+    const previousPalette=paletteCache;
+    image=frame;
+    frame.naturalWidth=frame.width;
+    frame.naturalHeight=frame.height;
+    paletteCacheKey="";
+    paletteCache=null;
+    render();
+    const out=document.createElement("canvas");
+    out.width=canvas.width;out.height=canvas.height;
+    out.getContext("2d").drawImage(canvas,0,0);
+    image=previousImage;
+    paletteCacheKey=previousPaletteKey;
+    paletteCache=previousPalette;
+    return out;
+  }
+});
