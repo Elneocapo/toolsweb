@@ -302,3 +302,52 @@ reset.onclick=()=>{
 };
 
 setLabels();
+
+async function renderNeoGifJpegFrame(frame){
+  const w=frame.width,h=frame.height;
+  const data=new Uint8ClampedArray(frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data);
+  const frameWorker=new Worker("jpeg-compresion-worker.js?v=2");
+  return new Promise((resolve,reject)=>{
+    let finished=false;
+    const fail=error=>{
+      if(finished)return;
+      finished=true;
+      frameWorker.terminate();
+      reject(error instanceof Error?error:new Error("No se pudo procesar el frame."));
+    };
+    frameWorker.onmessage=event=>{
+      const message=event.data;
+      if(message.type==="ready"){
+        frameWorker.postMessage({
+          type:"render",token:1,
+          compression:Number(compression.value),
+          blockSize:Number(blockSize.value),
+          acGain:Number(acGain.value)
+        });
+      }else if(message.type==="result"){
+        if(finished)return;
+        finished=true;
+        const out=new Uint8ClampedArray(message.buffer);
+        frameWorker.terminate();
+        const result=document.createElement("canvas");
+        result.width=w;result.height=h;
+        result.getContext("2d").putImageData(new ImageData(out,w,h),0,0);
+        resolve(result);
+      }else if(message.type==="error"){
+        fail(new Error(message.message||"No se pudo procesar el frame."));
+      }
+    };
+    frameWorker.onerror=fail;
+    frameWorker.postMessage({
+      type:"init",width:w,height:h,blockSize:Number(blockSize.value)||8,
+      buffer:data.buffer
+    },[data.buffer]);
+  });
+}
+
+window.NeoGif.register({
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIDE,
+  async renderFrame(frame){
+    return renderNeoGifJpegFrame(frame);
+  }
+});
