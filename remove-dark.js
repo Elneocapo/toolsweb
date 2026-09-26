@@ -64,3 +64,14 @@ download.addEventListener("click",()=>{
  }else if(mode==="video"&&window.__removeDarkVideo){const a=document.createElement("a");a.download="neotools-remove-dark.webm";a.href=URL.createObjectURL(window.__removeDarkVideo);a.click()}
 });
 reset.addEventListener("click",()=>{fileInput.value="";resetState()});
+
+window.NeoGif.register({
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:1000,transparent:true,
+  renderFrame(frame){
+    const out=document.createElement("canvas");
+    out.width=frame.width;out.height=frame.height;
+    out.getContext("2d").drawImage(frame,0,0);
+    applyPixels(out);
+    return out;
+  }
+});
