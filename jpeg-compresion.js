@@ -1,6 +1,6 @@
 const fileInput=document.getElementById("fileInput"),dropZone=document.getElementById("dropZone"),canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d"),compression=document.getElementById("compression"),compressionValue=document.getElementById("compressionValue"),download=document.getElementById("download"),reset=document.getElementById("reset"),placeholder=document.getElementById("placeholder"),fileName=document.getElementById("fileName");
 
-let image=null,url=null,sourceCanvas=null,sourceCtx=null,sourceData=null,worker=null,workerUrl=null,renderToken=0,renderTimer=0,latestBlob=null,workerReady=false;
+let image=null,url=null,sourceCanvas=null,sourceCtx=null,sourceData=null,worker=null,workerUrl=null,renderToken=0,renderTimer=0,latestBlob=null,workerReady=false,workerBusy=false;
 
 const MAX_SIDE=800;
 
