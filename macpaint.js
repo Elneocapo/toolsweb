@@ -472,3 +472,32 @@ function updateLabels(){
 parsePatterns();
 buildPatternRamp();
 updateLabels();
+
+window.NeoGif.register({
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIDE,
+  renderFrame(frame){
+    const previousImage=image;
+    const previousSourceCanvas=sourceCanvas;
+    const previousSourceCtx=sourceCtx;
+    const previousSourceData=sourceData;
+    const previousWidth=canvas.width;
+    const previousHeight=canvas.height;
+    image=frame;
+    sourceCanvas=frame;
+    sourceCtx=frame.getContext("2d",{willReadFrequently:true});
+    sourceData=new Uint8ClampedArray(sourceCtx.getImageData(0,0,frame.width,frame.height).data);
+    canvas.width=frame.width;
+    canvas.height=frame.height;
+    render();
+    const out=document.createElement("canvas");
+    out.width=canvas.width;out.height=canvas.height;
+    out.getContext("2d").drawImage(canvas,0,0);
+    image=previousImage;
+    sourceCanvas=previousSourceCanvas;
+    sourceCtx=previousSourceCtx;
+    sourceData=previousSourceData;
+    canvas.width=previousWidth;
+    canvas.height=previousHeight;
+    return out;
+  }
+});
