@@ -1,3 +1,5 @@
+import { GIFEncoder, quantize, applyPalette } from "./vendor/gifenc/index.js";
+
 const fileInput=document.getElementById("fileInput");
 const dropZone=document.getElementById("dropZone");
 const canvas=document.getElementById("canvas");
@@ -364,8 +366,7 @@ async function exportGif(){
       exportDelays=frameDelays.slice();
       for(const frame of frames){
         const processed=makeCanvas(frame.width,frame.height);
-        const pctx=processed.getContext("2d",{willReadFrequently:true});
-        pctx.drawImage(frame,0,0);
+        processed.getContext("2d").drawImage(frame,0,0);
         applyPixels(processed);
         exportFrames.push(processed);
       }
@@ -373,38 +374,63 @@ async function exportGif(){
 
     if(!exportFrames.length)throw new Error("No hay frames para exportar.");
 
-    const gif=new GIF({
-      workers:1,
-      quality:20,
-      width:exportFrames[0].width,
-      height:exportFrames[0].height,
-      repeat:0,
-      workerScript:"gif.worker.js?v=5",
-      dither:false,
-      transparent:1
-    });
+    const gif=GIFEncoder();
 
-    exportFrames.forEach((frame,i)=>{
-      gif.addFrame(frame,{delay:exportDelays[i]||100,copy:true});
-    });
+    for(let i=0;i<exportFrames.length;i++){
+      const frame=exportFrames[i];
+      const imageData=frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,frame.width,frame.height);
+      const rgba=imageData.data;
+      const rgb=new Uint8Array(rgba.length);
 
-    gif.on("finished",blob=>{
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.download="neotools-remove-dark.gif";
-      a.href=url;
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1500);
-      download.disabled=false;
-      fileName.textContent=currentFile.name+" · GIF listo";
-    });
+      for(let p=0;p<rgba.length;p+=4){
+        const alpha=rgba[p+3];
+        if(alpha<128){
+          rgb[p]=0;
+          rgb[p+1]=0;
+          rgb[p+2]=0;
+        }else{
+          rgb[p]=rgba[p];
+          rgb[p+1]=rgba[p+1];
+          rgb[p+2]=rgba[p+2];
+        }
+        rgb[p+3]=255;
+      }
 
-    gif.on("abort",()=>{
-      download.disabled=false;
-      fileName.textContent=currentFile.name+" · exportación cancelada";
-    });
+      // Reserve palette index 0 for transparency.
+      const palette=quantize(rgb,255);
+      const indexed=applyPalette(rgb,palette);
+      const outputIndex=new Uint8Array(indexed.length);
 
-    gif.render();
+      for(let p=0;p<indexed.length;p++){
+        outputIndex[p]=rgba[p*4+3]<128 ? 0 : Math.min(255,indexed[p]+1);
+      }
+
+      palette.unshift([0,0,0]);
+
+      gif.writeFrame(outputIndex,frame.width,frame.height,{
+        palette,
+        delay:exportDelays[i]||100,
+        repeat:0,
+        transparent:true,
+        transparentIndex:0,
+        dispose:2
+      });
+
+      await new Promise(requestAnimationFrame);
+    }
+
+    gif.finish();
+
+    const blob=new Blob([gif.bytes()],{type:"image/gif"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.download="neotools-remove-dark.gif";
+    a.href=url;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+
+    download.disabled=false;
+    fileName.textContent=currentFile.name+" · GIF listo";
   }catch(error){
     console.error("REMOVE DARK GIF export:",error);
     download.disabled=false;
