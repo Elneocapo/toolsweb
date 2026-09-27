@@ -58,7 +58,12 @@ function applyPixels(target){
 
   for(let i=0;i<data.data.length;i+=4){
     const brightness=.299*data.data[i]+.587*data.data[i+1]+.114*data.data[i+2];
-    if(brightness<=limit)data.data[i+3]=0;
+    if(brightness<=limit){
+      data.data[i]=0;
+      data.data[i+1]=0;
+      data.data[i+2]=0;
+      data.data[i+3]=0;
+    }
   }
 
   targetCtx.putImageData(data,0,0);
