@@ -19,8 +19,6 @@
     return c;
   }
 
-  const jpegWorkers=new WeakMap();
-
   function processJpegFrame(toolConfig,frame){
     let pool=jpegWorkers.get(toolConfig);
 
