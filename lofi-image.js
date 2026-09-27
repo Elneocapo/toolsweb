@@ -156,7 +156,7 @@ function scheduleRender(){
 }
 
 function load(file){
-  if(!file||!file.type.startsWith("image/")||file.type==="image/gif"||/\.gif$/i.test(file.name||""))return;
+  if(!file||!file.type.startsWith("image/"))return;
 
   if(url)URL.revokeObjectURL(url);
   url=URL.createObjectURL(file);
