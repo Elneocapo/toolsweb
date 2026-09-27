@@ -1,5 +1,5 @@
 (function(){
-  const GIFJS_WORKER="gif.worker.js?v=3";
+  const GIFJS_WORKER="gif.worker.js?v=4";
   const GIF_MAX_SIDE_DEFAULT=360;
 
   let tool=null;
@@ -319,38 +319,6 @@
   }
 
 
-function chooseTransparentKey(source){
-  const ctx=source.getContext("2d",{willReadFrequently:true});
-  const data=ctx.getImageData(0,0,source.width,source.height).data;
-  const used=new Set();
-  for(let i=0;i<data.length;i+=4){
-    if(data[i+3]===255){
-      used.add((data[i]<<16)|(data[i+1]<<8)|data[i+2]);
-    }
-  }
-  let key=1;
-  while(key<=0xffffff&&used.has(key))key++;
-  if(key>0xffffff)throw new Error("No hay color libre para la transparencia.");
-  return [(key>>16)&255,(key>>8)&255,key&255];
-}
-
-  function keyTransparentCanvas(source,key){
-    const keyed=makeCanvas(source.width,source.height);
-    const kctx=keyed.getContext("2d");
-    kctx.fillStyle=`rgb(${key[0]},${key[1]},${key[2]})`;
-    kctx.fillRect(0,0,keyed.width,keyed.height);
-    kctx.drawImage(source,0,0);
-    const data=kctx.getImageData(0,0,keyed.width,keyed.height);
-    for(let i=0;i<data.data.length;i+=4){
-      if(data.data[i+3]<128){
-        data.data[i]=0;data.data[i+1]=255;data.data[i+2]=0;
-      }
-      data.data[i+3]=255;
-    }
-    kctx.putImageData(data,0,0);
-    return keyed;
-  }
-
   async function downloadGif(){
     if(!state||!state.readySources||state.exporting)return;
     stopPreview();
@@ -367,8 +335,6 @@ function chooseTransparentKey(source){
         const processed=await processOne(i);
         if(!state||state.generation!==myGeneration)return;
 
-        if(tool.transparent&&!encoderKey)encoderKey=chooseTransparentKey(processed.canvas);
-
         if(!encoder){
           encoder=new GIF({
             workers:1,
@@ -382,7 +348,7 @@ function chooseTransparentKey(source){
           });
         }
 
-        const source=tool.transparent?keyTransparentCanvas(processed.canvas,encoderKey):processed.canvas;
+        const source=processed.canvas;
         encoder.addFrame(source,{delay:processed.delay||100,copy:true});
         setProgress((i+1)/state.count*50,state.file.name+" · preparando GIF…");
         await new Promise(requestAnimationFrame);
