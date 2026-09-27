@@ -49,6 +49,7 @@
         if(data.type==="result"){
           pool.current=null;
           pool.busy=false;
+          pool.pending.shift();
 
           const out=new Uint8ClampedArray(data.buffer);
           const result=makeCanvas(task.width,task.height);
@@ -61,17 +62,23 @@
         if(data.type==="error"){
           pool.current=null;
           pool.busy=false;
+          pool.pending.shift();
           task.reject(new Error(data.message||"No se pudo procesar el frame."));
           startJpegTask(pool);
         }
       };
 
       worker.onerror=error=>{
+        const message=(error&&error.message)||"El worker de JPEG dejó de responder.";
+        const current=pool.current;
         pool.current=null;
         pool.busy=false;
+        if(current)current.reject(new Error(message));
         while(pool.pending.length){
-          pool.pending.shift().reject(error);
+          pool.pending.shift().reject(new Error(message));
         }
+        try{worker.terminate();}catch(_){}
+        jpegWorkers.delete(toolConfig);
       };
 
       jpegWorkers.set(toolConfig,pool);
@@ -397,7 +404,8 @@
         setProgress(0,state.file.name+" · no se pudo generar el GIF");
         tool.download.disabled=false;
         tool.download.textContent="DESCARGAR GIF ↓";
-        alert("No se pudo generar el GIF. El archivo puede ser demasiado grande para procesarlo en el navegador.");
+        const detail=error&&error.message ? " " + error.message : "";
+        alert("No se pudo generar el GIF."+detail);
       }
     }
   }
