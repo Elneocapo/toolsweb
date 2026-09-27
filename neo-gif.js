@@ -1,5 +1,5 @@
 (function(){
-  const GIFJS_WORKER="gif.worker.js?v=1";
+  const GIFJS_WORKER="gif.worker.js?v=2";
   const GIF_MAX_SIDE_DEFAULT=360;
 
   let tool=null;
@@ -321,7 +321,7 @@
   function keyTransparentCanvas(source){
     const keyed=makeCanvas(source.width,source.height);
     const kctx=keyed.getContext("2d");
-    kctx.fillStyle="#00ff00";
+    kctx.fillStyle="#01ff01";
     kctx.fillRect(0,0,keyed.width,keyed.height);
     kctx.drawImage(source,0,0);
     const data=kctx.getImageData(0,0,keyed.width,keyed.height);
@@ -360,7 +360,7 @@
             repeat:0,
             workerScript:GIFJS_WORKER,
             dither:false,
-            ...(tool.transparent?{transparent:0x00ff00}:{})
+            ...(tool.transparent?{transparent:0x01ff01}:{})
           });
         }
 
