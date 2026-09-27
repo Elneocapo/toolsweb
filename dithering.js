@@ -484,7 +484,7 @@ reset.onclick=()=>{
 updateLabels();
 
 window.NeoGif.register({
-  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIZE,gifMaxSide:640,
+  fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIZE,gifMaxSide:360,
   renderFrame(frame){
     const previousImage=image;
     const previousPaletteKey=paletteCacheKey;
