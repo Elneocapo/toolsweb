@@ -137,40 +137,57 @@ function loadGifPreview(file){
   mode="gif";
   frames=[];
   frameDelays=[];
+  fileName.textContent=file.name+" · cargando GIF…";
 
-  gifObjectUrl=URL.createObjectURL(file);
-  gifImage=new Image();
+  const reader=new FileReader();
 
-  gifImage.onload=()=>{
-    const scale=Math.min(
-      1,
-      GIF_PREVIEW_SIDE/Math.max(gifImage.naturalWidth,gifImage.naturalHeight)
-    );
-    const w=Math.max(1,Math.round(gifImage.naturalWidth*scale));
-    const h=Math.max(1,Math.round(gifImage.naturalHeight*scale));
+  reader.onload=()=>{
+    gifImage=new Image();
+    gifImage.onload=()=>{
+      const naturalW=gifImage.naturalWidth||1;
+      const naturalH=gifImage.naturalHeight||1;
+      const scale=Math.min(1,GIF_PREVIEW_SIDE/Math.max(naturalW,naturalH));
+      const w=Math.max(1,Math.round(naturalW*scale));
+      const h=Math.max(1,Math.round(naturalH*scale));
 
-    prepareCanvas(w,h);
-    fileName.textContent=file.name+" · GIF animado";
-    previewGifFrame();
+      prepareCanvas(w,h);
 
-    decodeGifForDownload(file);
+      // Paint the first frame immediately so the upload is visibly confirmed.
+      ctx.clearRect(0,0,w,h);
+      ctx.drawImage(gifImage,0,0,w,h);
+      applyPixels(canvas);
+      updateThresholdLabel();
+
+      fileName.textContent=file.name+" · GIF animado";
+      stopGifPreview();
+      gifPreviewTimer=setTimeout(previewGifFrame,60);
+
+      decodeGifForDownload(file);
+    };
+
+    gifImage.onerror=()=>{
+      gifImage=null;
+      mode="image";
+      canvas.hidden=true;
+      placeholder.hidden=false;
+      download.disabled=true;
+      reset.disabled=true;
+      fileName.textContent="No se pudo abrir el GIF.";
+    };
+
+    gifImage.src=reader.result;
   };
 
-  gifImage.onerror=()=>{
-    if(gifObjectUrl)URL.revokeObjectURL(gifObjectUrl);
-    gifObjectUrl=null;
-    gifImage=null;
-    mode="image";
-    fileName.textContent="No se pudo abrir el GIF.";
+  reader.onerror=()=>{
+    fileName.textContent="No se pudo leer el GIF.";
     canvas.hidden=true;
     placeholder.hidden=false;
     download.disabled=true;
     reset.disabled=true;
   };
 
-  gifImage.src=gifObjectUrl;
+  reader.readAsDataURL(file);
 }
-
 async function decodeGifForDownload(file){
   try{
     if(typeof parseGIF!=="function"||typeof decompressFrames!=="function"){
