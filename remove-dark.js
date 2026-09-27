@@ -71,6 +71,38 @@ function applyPixels(target){
   targetCtx.putImageData(data,0,0);
 }
 
+
+function cleanGreenArtifacts(target){
+  const targetCtx=target.getContext("2d",{willReadFrequently:true});
+  const data=targetCtx.getImageData(0,0,target.width,target.height);
+  const {width,height}=target;
+  const original=new Uint8ClampedArray(data.data);
+  const isArtifact=(i)=>{
+    const r=original[i],g=original[i+1],b=original[i+2],a=original[i+3];
+    return a===255 && g>=180 && g-Math.max(r,b)>=120 && r<=40 && b<=40;
+  };
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const i=(y*width+x)*4;
+      if(!isArtifact(i))continue;
+      let transparentNeighbors=0;
+      for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++){
+          if(dx===0&&dy===0)continue;
+          const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=width||ny>=height)continue;
+          const ni=(ny*width+nx)*4;
+          if(original[ni+3]===0)transparentNeighbors++;
+        }
+      }
+      if(transparentNeighbors>=4){
+        data.data[i]=0;data.data[i+1]=0;data.data[i+2]=0;data.data[i+3]=0;
+      }
+    }
+  }
+  targetCtx.putImageData(data,0,0);
+}
+
 function exportPng(){
   if(!currentFile||mode!=="image")return;
 
@@ -79,6 +111,7 @@ function exportPng(){
   octx.clearRect(0,0,output.width,output.height);
   octx.drawImage(sourceCanvas,0,0);
   applyPixels(output);
+  cleanGreenArtifacts(output);
 
   // Final pass: transparent pixels contain no residual RGB data.
   const data=octx.getImageData(0,0,output.width,output.height);
@@ -117,6 +150,7 @@ function drawSourceImage(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(sourceCanvas,0,0);
   applyPixels(canvas);
+  cleanGreenArtifacts(canvas);
   updateThresholdLabel();
 }
 
@@ -264,6 +298,8 @@ function previewGifFrame(index){
   const frame=frames[index%frames.length];
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(frame,0,0);
+  applyPixels(canvas);
+  cleanGreenArtifacts(canvas);
   const delay=Math.max(20,frameDelays[index%frameDelays.length]||100);
   gifPreviewTimer=setTimeout(()=>previewGifFrame((index+1)%frames.length),delay);
 }
@@ -277,6 +313,7 @@ async function previewDecoderFrame(index){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(frame.canvas,0,0);
     applyPixels(canvas);
+    cleanGreenArtifacts(canvas);
     gifPreviewTimer=setTimeout(()=>previewDecoderFrame((index+1)%count),frame.delay);
   }catch(error){
     console.error("REMOVE DARK GIF preview:",error);
@@ -358,8 +395,16 @@ async function exportGif(){
         if(image.close)image.close();
       }
     }else{
-      exportFrames=frames;
-      exportDelays=frameDelays;
+      exportFrames=[];
+      exportDelays=frameDelays.slice();
+      for(const frame of frames){
+        const processed=makeCanvas(frame.width,frame.height);
+        const pctx=processed.getContext("2d",{willReadFrequently:true});
+        pctx.drawImage(frame,0,0);
+        applyPixels(processed);
+        cleanGreenArtifacts(processed);
+        exportFrames.push(processed);
+      }
     }
 
     if(!exportFrames.length)throw new Error("No hay frames para exportar.");
@@ -370,24 +415,24 @@ async function exportGif(){
       width:exportFrames[0].width,
       height:exportFrames[0].height,
       repeat:0,
-      workerScript:"gif.worker.js?v=2",
+      workerScript:"gif.worker.js?v=3",
       dither:false,
-      transparent:0x01ff01
+      transparent:0x010101
     });
 
     exportFrames.forEach((frame,i)=>{
       const out=makeCanvas(frame.width,frame.height);
       const octx=out.getContext("2d");
-      octx.fillStyle="#01ff01";
+      octx.fillStyle="#010101";
       octx.fillRect(0,0,out.width,out.height);
       octx.drawImage(frame,0,0);
       const data=octx.getImageData(0,0,out.width,out.height);
 
       for(let p=0;p<data.data.length;p+=4){
         if(data.data[p+3]<128){
-          data.data[p]=0;
-          data.data[p+1]=255;
-          data.data[p+2]=0;
+          data.data[p]=1;
+          data.data[p+1]=1;
+          data.data[p+2]=1;
         }
         data.data[p+3]=255;
       }
