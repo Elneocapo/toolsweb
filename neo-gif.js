@@ -1,5 +1,5 @@
 (function(){
-  const GIFJS_WORKER="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
+  const GIFJS_WORKER="gif.worker.js?v=1";
   const GIF_MAX_SIDE_DEFAULT=360;
 
   let tool=null;
@@ -19,57 +19,95 @@
     return c;
   }
 
+  const jpegWorkers=new WeakMap();
+
   function processJpegFrame(toolConfig,frame){
     let pool=jpegWorkers.get(toolConfig);
+
     if(!pool){
-      const worker=new Worker("jpeg-compresion-worker.js?v=4");
-      pool={worker,ready:false,busy:false,pending:[]};
+      const worker=new Worker("jpeg-compresion-worker.js?v=5");
+      pool={worker,busy:false,current:null,pending:[]};
+
       worker.onmessage=event=>{
         const data=event.data;
+
         if(data.type==="ready"){
-          pool.ready=true;
-          startJpegTask(pool);
+          const task=pool.current;
+          if(!task||!pool.busy)return;
+
+          worker.postMessage({
+            type:"render",
+            token:1,
+            compression:task.compression,
+            blockSize:task.blockSize,
+            acGain:task.acGain
+          });
           return;
         }
-        const task=pool.pending.shift();
-        pool.busy=false;
+
+        const task=pool.current;
         if(!task)return;
+
         if(data.type==="result"){
+          pool.current=null;
+          pool.busy=false;
+
           const out=new Uint8ClampedArray(data.buffer);
           const result=makeCanvas(task.width,task.height);
           result.getContext("2d").putImageData(new ImageData(out,task.width,task.height),0,0);
           task.resolve(result);
-        }else{
-          task.reject(new Error(data.message||"No se pudo procesar el frame."));
+          startJpegTask(pool);
+          return;
         }
-        startJpegTask(pool);
+
+        if(data.type==="error"){
+          pool.current=null;
+          pool.busy=false;
+          task.reject(new Error(data.message||"No se pudo procesar el frame."));
+          startJpegTask(pool);
+        }
       };
+
       worker.onerror=error=>{
+        pool.current=null;
         pool.busy=false;
-        while(pool.pending.length)pool.pending.shift().reject(error);
+        while(pool.pending.length){
+          pool.pending.shift().reject(error);
+        }
       };
+
       jpegWorkers.set(toolConfig,pool);
     }
 
-    const w=frame.width,h=frame.height;
-    const data=new Uint8ClampedArray(frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data);
+    const w=frame.width;
+    const h=frame.height;
+    const data=new Uint8ClampedArray(
+      frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data
+    );
+
     return new Promise((resolve,reject)=>{
       pool.pending.push({
-        width:w,height:h,buffer:data.buffer,
+        width:w,
+        height:h,
+        buffer:data.buffer,
         blockSize:Number(toolConfig.blockSize?.value||8),
         compression:Number(toolConfig.compression?.value||0),
         acGain:Number(toolConfig.acGain?.value||100),
-        resolve,reject
+        resolve,
+        reject
       });
+
       startJpegTask(pool);
     });
   }
 
   function startJpegTask(pool){
-    if(!pool.ready||pool.busy||!pool.pending.length)return;
+    if(pool.busy||!pool.pending.length)return;
+
     const task=pool.pending[0];
+    pool.current=task;
     pool.busy=true;
-    pool.ready=false;
+
     pool.worker.postMessage({
       type:"init",
       width:task.width,
@@ -77,20 +115,6 @@
       blockSize:task.blockSize,
       buffer:task.buffer
     },[task.buffer]);
-    const wait=()=>{
-      if(!pool.busy)return;
-      if(!pool.ready){
-        requestAnimationFrame(wait);
-        return;
-      }
-      pool.worker.postMessage({
-        type:"render",token:1,
-        compression:task.compression,
-        blockSize:task.blockSize,
-        acGain:task.acGain
-      });
-    };
-    wait();
   }
 
   function setupProgress(){
