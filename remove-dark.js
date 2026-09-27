@@ -119,7 +119,92 @@ function loadImage(file){
   img.src=url;
 }
 
-function previewGifFrame(index=0){
+function makeCanvas(w,h){
+  const c=document.createElement("canvas");
+  c.width=w;
+  c.height=h;
+  return c;
+}
+
+async function decodeGifFrames(file,maxSide){
+  if(typeof parseGIF!=="function"||typeof decompressFrames!=="function"){
+    throw new Error("No se pudo cargar el lector de GIF.");
+  }
+
+  const buffer=await file.arrayBuffer();
+  const parsed=parseGIF(buffer);
+  const raw=decompressFrames(parsed,true);
+
+  if(!raw.length)throw new Error("El GIF no contiene frames.");
+
+  const logicalW=parsed.lsd.width;
+  const logicalH=parsed.lsd.height;
+  const scale=Math.min(1,maxSide/Math.max(logicalW,logicalH));
+  const w=Math.max(1,Math.round(logicalW*scale));
+  const h=Math.max(1,Math.round(logicalH*scale));
+
+  const composite=makeCanvas(w,h);
+  const cctx=composite.getContext("2d");
+  let previousDisposal=0;
+  let previousDims=null;
+  let restoreCanvas=null;
+  const decoded=[];
+
+  for(const frame of raw){
+    if(previousDisposal===2&&previousDims){
+      cctx.clearRect(
+        Math.round(previousDims.left*scale),
+        Math.round(previousDims.top*scale),
+        Math.round(previousDims.width*scale),
+        Math.round(previousDims.height*scale)
+      );
+    }else if(previousDisposal===3&&restoreCanvas){
+      cctx.clearRect(0,0,w,h);
+      cctx.drawImage(restoreCanvas,0,0);
+    }
+
+    let currentRestore=null;
+    if(frame.disposalType===3){
+      currentRestore=makeCanvas(w,h);
+      currentRestore.getContext("2d").drawImage(composite,0,0);
+    }
+
+    const patch=makeCanvas(frame.dims.width,frame.dims.height);
+    const pctx=patch.getContext("2d");
+    pctx.putImageData(
+      new ImageData(
+        new Uint8ClampedArray(frame.patch),
+        frame.dims.width,
+        frame.dims.height
+      ),
+      0,0
+    );
+
+    cctx.drawImage(
+      patch,
+      Math.round(frame.dims.left*scale),
+      Math.round(frame.dims.top*scale),
+      Math.max(1,Math.round(frame.dims.width*scale)),
+      Math.max(1,Math.round(frame.dims.height*scale))
+    );
+
+    const snapshot=makeCanvas(w,h);
+    snapshot.getContext("2d").drawImage(composite,0,0);
+
+    decoded.push({
+      canvas:snapshot,
+      delay:Math.max(20,Number(frame.delay)||100)
+    });
+
+    previousDisposal=frame.disposalType||0;
+    previousDims=frame.dims;
+    restoreCanvas=currentRestore;
+  }
+
+  return {frames:decoded,width:w,height:h};
+}
+
+function previewGifFrame(index){
   if(mode!=="gif"||!frames.length)return;
 
   const frame=frames[index%frames.length];
@@ -127,7 +212,10 @@ function previewGifFrame(index=0){
   ctx.drawImage(frame,0,0);
 
   const delay=Math.max(20,frameDelays[index%frameDelays.length]||100);
-  gifPreviewTimer=setTimeout(()=>previewGifFrame((index+1)%frames.length),delay);
+  gifPreviewTimer=setTimeout(
+    ()=>previewGifFrame((index+1)%frames.length),
+    delay
+  );
 }
 
 async function loadGifPreview(file){
@@ -139,85 +227,13 @@ async function loadGifPreview(file){
   reset.disabled=false;
 
   try{
-    const buffer=await file.arrayBuffer();
-    if(typeof parseGIF!=="function"||typeof decompressFrames!=="function"){
-      throw new Error("Lector GIF no disponible.");
-    }
+    const decoded=await decodeGifFrames(file,GIF_PREVIEW_SIDE);
+    frames=decoded.frames;
+    frameDelays=frames.map(frame=>frame.delay);
 
-    const parsed=parseGIF(buffer);
-    const raw=decompressFrames(parsed,true);
-    if(!raw.length)throw new Error("El GIF no contiene frames.");
-
-    const logicalW=parsed.lsd.width||raw[0].dims.width;
-    const logicalH=parsed.lsd.height||raw[0].dims.height;
-    const scale=Math.min(1,GIF_PREVIEW_SIDE/Math.max(logicalW,logicalH));
-    const w=Math.max(1,Math.round(logicalW*scale));
-    const h=Math.max(1,Math.round(logicalH*scale));
-
-    const composite=document.createElement("canvas");
-    composite.width=w;
-    composite.height=h;
-    const cctx=composite.getContext("2d");
-
-    let previousDisposal=0;
-    let previousDims=null;
-    let restoreCanvas=null;
-    frames=[];
-    frameDelays=[];
-
-    for(const frame of raw){
-      if(previousDisposal===2&&previousDims){
-        cctx.clearRect(
-          Math.round(previousDims.left*scale),
-          Math.round(previousDims.top*scale),
-          Math.max(1,Math.round(previousDims.width*scale)),
-          Math.max(1,Math.round(previousDims.height*scale))
-        );
-      }else if(previousDisposal===3&&restoreCanvas){
-        cctx.clearRect(0,0,w,h);
-        cctx.drawImage(restoreCanvas,0,0);
-      }
-
-      let currentRestore=null;
-      if(frame.disposalType===3){
-        currentRestore=document.createElement("canvas");
-        currentRestore.width=w;
-        currentRestore.height=h;
-        currentRestore.getContext("2d").drawImage(composite,0,0);
-      }
-
-      const patch=document.createElement("canvas");
-      patch.width=frame.dims.width;
-      patch.height=frame.dims.height;
-      patch.getContext("2d").putImageData(
-        new ImageData(frame.patch,frame.dims.width,frame.dims.height),
-        0,0
-      );
-
-      cctx.drawImage(
-        patch,
-        Math.round(frame.dims.left*scale),
-        Math.round(frame.dims.top*scale),
-        Math.max(1,Math.round(frame.dims.width*scale)),
-        Math.max(1,Math.round(frame.dims.height*scale))
-      );
-
-      const output=document.createElement("canvas");
-      output.width=w;
-      output.height=h;
-      output.getContext("2d").drawImage(composite,0,0);
-      applyPixels(output);
-
-      frames.push(output);
-      frameDelays.push(Math.max(20,Number(frame.delay)||100));
-
-      previousDisposal=frame.disposalType||0;
-      previousDims=frame.dims;
-      restoreCanvas=currentRestore;
-    }
-
-    prepareCanvas(w,h);
+    prepareCanvas(decoded.width,decoded.height);
     fileName.textContent=file.name+" · "+frames.length+" frames";
+
     previewGifFrame(0);
     download.disabled=false;
   }catch(error){
