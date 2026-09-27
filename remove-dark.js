@@ -379,7 +379,7 @@ async function exportGif(){
       width:exportFrames[0].width,
       height:exportFrames[0].height,
       repeat:0,
-      workerScript:"gif.worker.js?v=4",
+      workerScript:"gif.worker.js?v=5",
       dither:false,
       transparent:1
     });
