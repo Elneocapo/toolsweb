@@ -331,15 +331,15 @@ async function exportGif(){
       width:exportFrames[0].width,
       height:exportFrames[0].height,
       repeat:0,
-      workerScript:"gif.worker.js?v=1",
+      workerScript:"gif.worker.js?v=2",
       dither:false,
-      transparent:0x00ff00
+      transparent:0x01ff01
     });
 
     exportFrames.forEach((frame,i)=>{
       const out=makeCanvas(frame.width,frame.height);
       const octx=out.getContext("2d");
-      octx.fillStyle="#00ff00";
+      octx.fillStyle="#01ff01";
       octx.fillRect(0,0,out.width,out.height);
       octx.drawImage(frame,0,0);
       const data=octx.getImageData(0,0,out.width,out.height);
