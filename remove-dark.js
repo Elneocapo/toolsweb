@@ -72,53 +72,6 @@ function applyPixels(target){
 }
 
 
-function cleanGreenArtifacts(target){
-  const targetCtx=target.getContext("2d",{willReadFrequently:true});
-  const data=targetCtx.getImageData(0,0,target.width,target.height);
-  const {width,height}=target;
-  const original=new Uint8ClampedArray(data.data);
-  const isArtifact=(i)=>{
-    const r=original[i],g=original[i+1],b=original[i+2],a=original[i+3];
-    return a===255 && g>=180 && g-Math.max(r,b)>=120 && r<=40 && b<=40;
-  };
-  for(let y=0;y<height;y++){
-    for(let x=0;x<width;x++){
-      const i=(y*width+x)*4;
-      if(!isArtifact(i))continue;
-      let transparentNeighbors=0;
-      for(let dy=-1;dy<=1;dy++){
-        for(let dx=-1;dx<=1;dx++){
-          if(dx===0&&dy===0)continue;
-          const nx=x+dx,ny=y+dy;
-          if(nx<0||ny<0||nx>=width||ny>=height)continue;
-          const ni=(ny*width+nx)*4;
-          if(original[ni+3]===0)transparentNeighbors++;
-        }
-      }
-      if(transparentNeighbors>=4){
-        data.data[i]=0;data.data[i+1]=0;data.data[i+2]=0;data.data[i+3]=0;
-      }
-    }
-  }
-  targetCtx.putImageData(data,0,0);
-}
-
-
-function chooseTransparentKey(source){
-  const ctx=source.getContext("2d",{willReadFrequently:true});
-  const data=ctx.getImageData(0,0,source.width,source.height).data;
-  const used=new Set();
-  for(let i=0;i<data.length;i+=4){
-    if(data[i+3]===255){
-      used.add((data[i]<<16)|(data[i+1]<<8)|data[i+2]);
-    }
-  }
-  let key=1;
-  while(key<=0xffffff&&used.has(key))key++;
-  if(key>0xffffff)throw new Error("No hay color libre para la transparencia.");
-  return [(key>>16)&255,(key>>8)&255,key&255];
-}
-
 function exportPng(){
   if(!currentFile||mode!=="image")return;
 
@@ -425,42 +378,18 @@ async function exportGif(){
 
     if(!exportFrames.length)throw new Error("No hay frames para exportar.");
 
-    const transparentKey=chooseTransparentKey(exportFrames[0]);
-    const transparentColor=(transparentKey[0]<<16)|(transparentKey[1]<<8)|transparentKey[2];
-
     const gif=new GIF({
       workers:1,
       quality:20,
       width:exportFrames[0].width,
       height:exportFrames[0].height,
       repeat:0,
-      workerScript:"gif.worker.js?v=3",
+      workerScript:"gif.worker.js?v=4",
       dither:false,
-      transparent:transparentColor
+      transparent:1
     });
 
-    exportFrames.forEach((frame,i)=>{
-      const out=makeCanvas(frame.width,frame.height);
-      const octx=out.getContext("2d");
-      octx.fillStyle=`rgb(${transparentKey[0]},${transparentKey[1]},${transparentKey[2]})`;
-      octx.fillRect(0,0,out.width,out.height);
-      octx.drawImage(frame,0,0);
-      const data=octx.getImageData(0,0,out.width,out.height);
-
-      for(let p=0;p<data.data.length;p+=4){
-        if(data.data[p+3]<128){
-          data.data[p]=transparentKey[0];
-          data.data[p+1]=transparentKey[1];
-          data.data[p+2]=transparentKey[2];
-        }
-        data.data[p+3]=255;
-      }
-
-      octx.putImageData(data,0,0);
-      gif.addFrame(out,{delay:exportDelays[i]||100,copy:true});
-    });
-
-    gif.on("finished",blob=>{
+    exportFrames.forEach((frame,i)=>{\n      gif.addFrame(frame,{delay:exportDelays[i]||100,copy:true});\n    });\n\n    gif.on("finished",blob=>{
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.download="neotools-remove-dark.gif";
