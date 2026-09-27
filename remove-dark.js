@@ -80,7 +80,6 @@ function exportPng(){
   octx.clearRect(0,0,output.width,output.height);
   octx.drawImage(sourceCanvas,0,0);
   applyPixels(output);
-  cleanGreenArtifacts(output);
 
   // Final pass: transparent pixels contain no residual RGB data.
   const data=octx.getImageData(0,0,output.width,output.height);
@@ -119,7 +118,6 @@ function drawSourceImage(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(sourceCanvas,0,0);
   applyPixels(canvas);
-  cleanGreenArtifacts(canvas);
   updateThresholdLabel();
 }
 
@@ -268,7 +266,6 @@ function previewGifFrame(index){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(frame,0,0);
   applyPixels(canvas);
-  cleanGreenArtifacts(canvas);
   const delay=Math.max(20,frameDelays[index%frameDelays.length]||100);
   gifPreviewTimer=setTimeout(()=>previewGifFrame((index+1)%frames.length),delay);
 }
@@ -282,8 +279,7 @@ async function previewDecoderFrame(index){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(frame.canvas,0,0);
     applyPixels(canvas);
-    cleanGreenArtifacts(canvas);
-    gifPreviewTimer=setTimeout(()=>previewDecoderFrame((index+1)%count),frame.delay);
+      gifPreviewTimer=setTimeout(()=>previewDecoderFrame((index+1)%count),frame.delay);
   }catch(error){
     console.error("REMOVE DARK GIF preview:",error);
     fileName.textContent=currentFile.name+" · preview no disponible";
@@ -371,7 +367,6 @@ async function exportGif(){
         const pctx=processed.getContext("2d",{willReadFrequently:true});
         pctx.drawImage(frame,0,0);
         applyPixels(processed);
-        cleanGreenArtifacts(processed);
         exportFrames.push(processed);
       }
     }
@@ -389,7 +384,11 @@ async function exportGif(){
       transparent:1
     });
 
-    exportFrames.forEach((frame,i)=>{\n      gif.addFrame(frame,{delay:exportDelays[i]||100,copy:true});\n    });\n\n    gif.on("finished",blob=>{
+    exportFrames.forEach((frame,i)=>{
+      gif.addFrame(frame,{delay:exportDelays[i]||100,copy:true});
+    });
+
+    gif.on("finished",blob=>{
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.download="neotools-remove-dark.gif";
