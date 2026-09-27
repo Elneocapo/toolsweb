@@ -57,8 +57,10 @@ function applyPixels(target){
   const limit=Number(threshold.value)*2.55;
 
   for(let i=0;i<data.data.length;i+=4){
+    const alpha=data.data[i+3];
     const brightness=.299*data.data[i]+.587*data.data[i+1]+.114*data.data[i+2];
-    if(brightness<=limit){
+
+    if(alpha<255 || brightness<=limit){
       data.data[i]=0;
       data.data[i+1]=0;
       data.data[i+2]=0;
@@ -67,6 +69,38 @@ function applyPixels(target){
   }
 
   targetCtx.putImageData(data,0,0);
+}
+
+function exportPng(){
+  if(!currentFile||mode!=="image")return;
+
+  const output=makeCanvas(canvas.width,canvas.height);
+  const octx=output.getContext("2d",{willReadFrequently:true});
+  octx.clearRect(0,0,output.width,output.height);
+  octx.drawImage(sourceCanvas,0,0);
+  applyPixels(output);
+
+  // Final pass: transparent pixels contain no residual RGB data.
+  const data=octx.getImageData(0,0,output.width,output.height);
+  for(let i=0;i<data.data.length;i+=4){
+    if(data.data[i+3]!==255){
+      data.data[i]=0;
+      data.data[i+1]=0;
+      data.data[i+2]=0;
+      data.data[i+3]=0;
+    }
+  }
+  octx.putImageData(data,0,0);
+
+  output.toBlob(blob=>{
+    if(!blob)return;
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.download="neotools-remove-dark.png";
+    a.href=url;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  },"image/png");
 }
 
 function prepareCanvas(w,h){
@@ -418,10 +452,7 @@ download.addEventListener("click",()=>{
   if(!currentFile)return;
 
   if(mode==="image"){
-    const a=document.createElement("a");
-    a.download="neotools-remove-dark.png";
-    a.href=canvas.toDataURL("image/png");
-    a.click();
+    exportPng();
     return;
   }
 
