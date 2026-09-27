@@ -1,5 +1,5 @@
 (function(){
-  const GIFJS_WORKER="gif.worker.js?v=4";
+  const GIFJS_WORKER="gif.worker.js?v=5";
   const GIF_MAX_SIDE_DEFAULT=360;
 
   let tool=null;
