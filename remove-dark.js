@@ -127,6 +127,25 @@ function makeCanvas(w,h){
 }
 
 async function decodeGifFrames(file,maxSide){
+  if(typeof ImageDecoder!=="undefined"){
+    const buffer=await file.arrayBuffer();
+    const decoder=new ImageDecoder({data:buffer,type:"image/gif"});
+    await decoder.tracks.ready;
+    const track=decoder.tracks.selectedTrack;
+    if(track&&track.frameCount){
+      const first=await decoder.decode({frameIndex:0,completeFramesOnly:true});
+      const image=first.image;
+      const sourceW=image.displayWidth||image.codedWidth;
+      const sourceH=image.displayHeight||image.codedHeight;
+      const scale=Math.min(1,maxSide/Math.max(sourceW,sourceH));
+      const width=Math.max(1,Math.round(sourceW*scale));
+      const height=Math.max(1,Math.round(sourceH*scale));
+      if(image.close)image.close();
+      return {type:"decoder",decoder,count:track.frameCount,width,height};
+    }
+    if(decoder.close)decoder.close();
+  }
+
   if(typeof parseGIF!=="function"||typeof decompressFrames!=="function"){
     throw new Error("No se pudo cargar el lector de GIF.");
   }
@@ -134,20 +153,15 @@ async function decodeGifFrames(file,maxSide){
   const buffer=await file.arrayBuffer();
   const parsed=parseGIF(buffer);
   const raw=decompressFrames(parsed,true);
-
   if(!raw.length)throw new Error("El GIF no contiene frames.");
 
-  const logicalW=parsed.lsd.width;
-  const logicalH=parsed.lsd.height;
+  const logicalW=parsed.lsd.width,logicalH=parsed.lsd.height;
   const scale=Math.min(1,maxSide/Math.max(logicalW,logicalH));
-  const w=Math.max(1,Math.round(logicalW*scale));
-  const h=Math.max(1,Math.round(logicalH*scale));
-
-  const composite=makeCanvas(w,h);
+  const width=Math.max(1,Math.round(logicalW*scale));
+  const height=Math.max(1,Math.round(logicalH*scale));
+  const composite=makeCanvas(width,height);
   const cctx=composite.getContext("2d");
-  let previousDisposal=0;
-  let previousDims=null;
-  let restoreCanvas=null;
+  let previousDisposal=0,previousDims=null,restoreCanvas=null;
   const decoded=[];
 
   for(const frame of raw){
@@ -159,25 +173,19 @@ async function decodeGifFrames(file,maxSide){
         Math.round(previousDims.height*scale)
       );
     }else if(previousDisposal===3&&restoreCanvas){
-      cctx.clearRect(0,0,w,h);
+      cctx.clearRect(0,0,width,height);
       cctx.drawImage(restoreCanvas,0,0);
     }
 
     let currentRestore=null;
     if(frame.disposalType===3){
-      currentRestore=makeCanvas(w,h);
+      currentRestore=makeCanvas(width,height);
       currentRestore.getContext("2d").drawImage(composite,0,0);
     }
 
     const patch=makeCanvas(frame.dims.width,frame.dims.height);
-    const pctx=patch.getContext("2d");
-    pctx.putImageData(
-      new ImageData(
-        new Uint8ClampedArray(frame.patch),
-        frame.dims.width,
-        frame.dims.height
-      ),
-      0,0
+    patch.getContext("2d").putImageData(
+      new ImageData(frame.patch,frame.dims.width,frame.dims.height),0,0
     );
 
     cctx.drawImage(
@@ -188,9 +196,8 @@ async function decodeGifFrames(file,maxSide){
       Math.max(1,Math.round(frame.dims.height*scale))
     );
 
-    const snapshot=makeCanvas(w,h);
+    const snapshot=makeCanvas(width,height);
     snapshot.getContext("2d").drawImage(composite,0,0);
-
     decoded.push({
       canvas:snapshot,
       delay:Math.max(20,Number(frame.delay)||100)
@@ -201,23 +208,42 @@ async function decodeGifFrames(file,maxSide){
     restoreCanvas=currentRestore;
   }
 
-  return {frames:decoded,width:w,height:h};
+  return {type:"frames",frames:decoded,width,height};
 }
 
+async function getDecoderFrame(index){
+  const result=await gifImage.decode({frameIndex:index,completeFramesOnly:true});
+  const image=result.image;
+  const out=makeCanvas(canvas.width,canvas.height);
+  out.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
+  const delay=Number.isFinite(image.duration)?Math.max(20,Math.round(image.duration/1000)):100;
+  if(image.close)image.close();
+  return {canvas:out,delay};
+}
 function previewGifFrame(index){
   if(mode!=="gif"||!frames.length)return;
-
   const frame=frames[index%frames.length];
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(frame,0,0);
-
   const delay=Math.max(20,frameDelays[index%frameDelays.length]||100);
-  gifPreviewTimer=setTimeout(
-    ()=>previewGifFrame((index+1)%frames.length),
-    delay
-  );
+  gifPreviewTimer=setTimeout(()=>previewGifFrame((index+1)%frames.length),delay);
 }
 
+async function previewDecoderFrame(index){
+  if(mode!=="gif"||!gifImage)return;
+  try{
+    const count=gifImage.tracks.selectedTrack.frameCount;
+    const frame=await getDecoderFrame(index%count);
+    if(mode!=="gif"||!gifImage)return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(frame.canvas,0,0);
+    applyPixels(canvas);
+    gifPreviewTimer=setTimeout(()=>previewDecoderFrame((index+1)%count),frame.delay);
+  }catch(error){
+    console.error("REMOVE DARK GIF preview:",error);
+    fileName.textContent=currentFile.name+" · preview no disponible";
+  }
+}
 async function loadGifPreview(file){
   resetState();
   currentFile=file;
@@ -228,12 +254,26 @@ async function loadGifPreview(file){
 
   try{
     const decoded=await decodeGifFrames(file,GIF_PREVIEW_SIDE);
+
+    if(decoded.type==="decoder"){
+      gifImage=decoded.decoder;
+      frames=[];
+      frameDelays=[];
+      canvas.width=decoded.width;
+      canvas.height=decoded.height;
+      canvas.hidden=false;
+      placeholder.hidden=true;
+      download.disabled=false;
+      fileName.textContent=file.name+" · GIF animado";
+      previewDecoderFrame(0);
+      return;
+    }
+
+    gifImage=null;
     frames=decoded.frames;
     frameDelays=frames.map(frame=>frame.delay);
-
     prepareCanvas(decoded.width,decoded.height);
     fileName.textContent=file.name+" · "+frames.length+" frames";
-
     previewGifFrame(0);
     download.disabled=false;
   }catch(error){
@@ -242,6 +282,7 @@ async function loadGifPreview(file){
     fileName.textContent="No se pudo procesar el GIF.";
   }
 }
+
 function loadFile(file){
   if(!file)return;
   const type=file.type||"";
@@ -251,46 +292,69 @@ function loadFile(file){
     loadImage(file);
   }
 }
-
-function exportGif(){
-  if(!frames.length)return;
+async function exportGif(){
+  if(!currentFile)return;
 
   download.disabled=true;
   fileName.textContent=currentFile.name+" · generando GIF…";
 
   try{
+    let exportFrames=[];
+    let exportDelays=[];
+
+    if(gifImage){
+      const count=gifImage.tracks.selectedTrack.frameCount;
+      const scale=Math.min(1,360/Math.max(canvas.width,canvas.height));
+      const w=Math.max(1,Math.round(canvas.width*scale));
+      const h=Math.max(1,Math.round(canvas.height*scale));
+
+      for(let i=0;i<count;i++){
+        const result=await gifImage.decode({frameIndex:i,completeFramesOnly:true});
+        const image=result.image;
+        const out=makeCanvas(w,h);
+        out.getContext("2d").drawImage(image,0,0,w,h);
+        applyPixels(out);
+        exportFrames.push(out);
+        exportDelays.push(Number.isFinite(image.duration)?Math.max(20,Math.round(image.duration/1000)):100);
+        if(image.close)image.close();
+      }
+    }else{
+      exportFrames=frames;
+      exportDelays=frameDelays;
+    }
+
+    if(!exportFrames.length)throw new Error("No hay frames para exportar.");
+
     const gif=new GIF({
       workers:1,
       quality:20,
-      width:canvas.width,
-      height:canvas.height,
+      width:exportFrames[0].width,
+      height:exportFrames[0].height,
       repeat:0,
       workerScript:"gif.worker.js?v=1",
       dither:false,
       transparent:0x00ff00
     });
 
-    frames.forEach((frame)=>{
-      const out=document.createElement("canvas");
-      out.width=frame.width;
-      out.height=frame.height;
+    exportFrames.forEach((frame,i)=>{
+      const out=makeCanvas(frame.width,frame.height);
       const octx=out.getContext("2d");
       octx.fillStyle="#00ff00";
       octx.fillRect(0,0,out.width,out.height);
       octx.drawImage(frame,0,0);
-
       const data=octx.getImageData(0,0,out.width,out.height);
-      for(let i=0;i<data.data.length;i+=4){
-        if(data.data[i+3]<128){
-          data.data[i]=0;
-          data.data[i+1]=255;
-          data.data[i+2]=0;
-        }
-        data.data[i+3]=255;
-      }
-      octx.putImageData(data,0,0);
 
-      gif.addFrame(out,{delay:frameDelays[gif.frames.length]||100,copy:true});
+      for(let p=0;p<data.data.length;p+=4){
+        if(data.data[p+3]<128){
+          data.data[p]=0;
+          data.data[p+1]=255;
+          data.data[p+2]=0;
+        }
+        data.data[p+3]=255;
+      }
+
+      octx.putImageData(data,0,0);
+      gif.addFrame(out,{delay:exportDelays[i]||100,copy:true});
     });
 
     gif.on("finished",blob=>{
