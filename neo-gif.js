@@ -1,40 +1,56 @@
 (function(){
   const GIFJS_WORKER="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js";
-  const GIF_MAX_SIDE_DEFAULT=480;
+  const GIF_MAX_SIDE_DEFAULT=360;
+
+  let tool=null;
+  let state=null;
+  let generation=0;
+  let animationTimer=0;
+  let previewBusy=false;
   const jpegWorkers=new WeakMap();
+
+  function isGif(file){
+    return !!file && (file.type==="image/gif" || /\.gif$/i.test(file.name||""));
+  }
+
+  function makeCanvas(w,h){
+    const c=document.createElement("canvas");
+    c.width=w;c.height=h;
+    return c;
+  }
 
   function processJpegFrame(toolConfig,frame){
     let pool=jpegWorkers.get(toolConfig);
     if(!pool){
       const worker=new Worker("jpeg-compresion-worker.js?v=4");
-      pool={worker,pending:[],ready:false,busy:false};
+      pool={worker,ready:false,busy:false,pending:[]};
       worker.onmessage=event=>{
         const data=event.data;
         if(data.type==="ready"){
           pool.ready=true;
+          startJpegTask(pool);
           return;
         }
         const task=pool.pending.shift();
-        if(data.type==="result"&&task){
-          pool.busy=false;
+        pool.busy=false;
+        if(!task)return;
+        if(data.type==="result"){
           const out=new Uint8ClampedArray(data.buffer);
           const result=makeCanvas(task.width,task.height);
           result.getContext("2d").putImageData(new ImageData(out,task.width,task.height),0,0);
           task.resolve(result);
-          startJpegTask(pool);
-        }else if(data.type==="error"&&task){
-          pool.busy=false;
+        }else{
           task.reject(new Error(data.message||"No se pudo procesar el frame."));
-          startJpegTask(pool);
         }
+        startJpegTask(pool);
       };
       worker.onerror=error=>{
-        while(pool.pending.length)pool.pending.shift().reject(error);
         pool.busy=false;
-        pool.ready=false;
+        while(pool.pending.length)pool.pending.shift().reject(error);
       };
       jpegWorkers.set(toolConfig,pool);
     }
+
     const w=frame.width,h=frame.height;
     const data=new Uint8ClampedArray(frame.getContext("2d",{willReadFrequently:true}).getImageData(0,0,w,h).data);
     return new Promise((resolve,reject)=>{
@@ -68,31 +84,13 @@
         return;
       }
       pool.worker.postMessage({
-        type:"render",
-        token:1,
+        type:"render",token:1,
         compression:task.compression,
         blockSize:task.blockSize,
         acGain:task.acGain
       });
     };
     wait();
-  }
-
-
-  let tool=null;
-  let state=null;
-  let generation=0;
-  let animationTimer=0;
-  let previewBusy=false;
-
-  function isGif(file){
-    return !!file && (file.type==="image/gif" || /\.gif$/i.test(file.name||""));
-  }
-
-  function makeCanvas(w,h){
-    const c=document.createElement("canvas");
-    c.width=w;c.height=h;
-    return c;
   }
 
   function setupProgress(){
@@ -114,9 +112,8 @@
   }
 
   function setProgress(value,label){
-    if(!tool)return;
     setupProgress();
-    if(tool.progressWrap)tool.progressWrap.style.display=value<=0||value>=100?"none":"block";
+    if(tool.progressWrap)tool.progressWrap.style.display=value>0&&value<100?"block":"none";
     if(tool.progressBar)tool.progressBar.style.width=Math.max(0,Math.min(100,value))+"%";
     if(tool.fileName&&label)tool.fileName.textContent=label;
   }
@@ -133,46 +130,18 @@
     if(tool.placeholder)tool.placeholder.hidden=true;
   }
 
-  async function decodeWithImageDecoder(file){
-    if(typeof ImageDecoder==="undefined")return null;
-    const buffer=await file.arrayBuffer();
-    const decoder=new ImageDecoder({data:buffer,type:"image/gif"});
-    await decoder.tracks.ready;
-    const track=decoder.tracks.selectedTrack;
-    if(!track||!track.frameCount)return null;
-    const frames=[];
-    for(let i=0;i<track.frameCount;i++){
-      const result=await decoder.decode({frameIndex:i,completeFramesOnly:true});
-      const image=result.image;
-      const w=image.displayWidth||image.codedWidth;
-      const h=image.displayHeight||image.codedHeight;
-      const c=makeCanvas(w,h);
-      c.getContext("2d").drawImage(image,0,0,w,h);
-      const duration=image.duration;
-      frames.push({canvas:c,delay:Number.isFinite(duration)?Math.max(20,Math.round(duration/1000)):100});
-      if(image.close)image.close();
-    }
-    if(decoder.close)decoder.close();
-    return frames;
-  }
-
-  async function decodeWithGifuct(file,maxSide){
+  async function decodeGifuct(file,maxSide){
     if(typeof parseGIF!=="function"||typeof decompressFrames!=="function")throw new Error("No se pudo cargar el lector de GIF.");
     const buffer=await file.arrayBuffer();
     const parsed=parseGIF(buffer);
     const raw=decompressFrames(parsed,true);
     if(!raw.length)throw new Error("El GIF no contiene frames.");
 
-    const logicalW=parsed.lsd.width;
-    const logicalH=parsed.lsd.height;
+    const logicalW=parsed.lsd.width,logicalH=parsed.lsd.height;
     const scale=Math.min(1,maxSide/Math.max(logicalW,logicalH));
-    const w=Math.max(1,Math.round(logicalW*scale));
-    const h=Math.max(1,Math.round(logicalH*scale));
-    const composite=makeCanvas(w,h);
-    const cctx=composite.getContext("2d");
-    let previousDisposal=0;
-    let previousDims=null;
-    let restoreCanvas=null;
+    const w=Math.max(1,Math.round(logicalW*scale)),h=Math.max(1,Math.round(logicalH*scale));
+    const composite=makeCanvas(w,h),cctx=composite.getContext("2d");
+    let previousDisposal=0,previousDims=null,restoreCanvas=null;
     const frames=[];
 
     for(const frame of raw){
@@ -212,47 +181,59 @@
       previousDims=frame.dims;
       restoreCanvas=currentRestore;
     }
-    return frames;
+    return {kind:"frames",frames,width:w,height:h};
   }
 
-  async function decode(file,maxSide){
-    try{
-      const decoded=await decodeWithImageDecoder(file);
-      if(decoded&&decoded.length)return decoded;
-    }catch(error){
-      console.warn("ImageDecoder GIF fallback:",error);
+  async function openGif(file,maxSide){
+    if(typeof ImageDecoder!=="undefined"){
+      try{
+        const buffer=await file.arrayBuffer();
+        const decoder=new ImageDecoder({data:buffer,type:"image/gif"});
+        await decoder.tracks.ready;
+        const track=decoder.tracks.selectedTrack;
+        if(track&&track.frameCount){
+          const count=track.frameCount;
+          const firstResult=await decoder.decode({frameIndex:0,completeFramesOnly:true});
+          const firstImage=firstResult.image;
+          const sourceW=firstImage.displayWidth||firstImage.codedWidth;
+          const sourceH=firstImage.displayHeight||firstImage.codedHeight;
+          const scale=Math.min(1,maxSide/Math.max(sourceW,sourceH));
+          const w=Math.max(1,Math.round(sourceW*scale));
+          const h=Math.max(1,Math.round(sourceH*scale));
+          if(firstImage.close)firstImage.close();
+          return {
+            kind:"decoder",
+            decoder,count,width:w,height:h,
+            scale,
+            durationCache:new Map()
+          };
+        }
+        if(decoder.close)decoder.close();
+      }catch(error){
+        console.warn("ImageDecoder GIF fallback:",error);
+      }
     }
-    return decodeWithGifuct(file,maxSide);
+    return decodeGifuct(file,maxSide);
+  }
+
+  async function getFrame(index){
+    if(!state)return null;
+    if(state.kind==="frames")return state.frames[index];
+    const result=await state.decoder.decode({frameIndex:index,completeFramesOnly:true});
+    const image=result.image;
+    const c=makeCanvas(state.width,state.height);
+    c.getContext("2d").drawImage(image,0,0,state.width,state.height);
+    const duration=image.duration;
+    if(!state.durationCache.has(index))state.durationCache.set(index,Number.isFinite(duration)?Math.max(20,Math.round(duration/1000)):100);
+    if(image.close)image.close();
+    return {canvas:c,delay:state.durationCache.get(index)||100};
   }
 
   async function processOne(index){
-    if(!state||!tool)return null;
-    const source=state.sources[index];
+    const source=await getFrame(index);
     if(!source)return null;
-    return tool.renderFrame(source.canvas,index,state.sources.length);
-  }
-
-  async function previewLoop(myGeneration,index){
-    if(previewBusy)return;
-    previewBusy=true;
-    try{
-      while(state&&state.generation===myGeneration&&state.sources.length){
-        const i=index%state.sources.length;
-        const started=performance.now();
-        const frame=await processOne(i);
-        if(!state||state.generation!==myGeneration)return;
-        showFrame(frame);
-        state.previewIndex=(i+1)%state.sources.length;
-        const delay=Math.max(20,state.sources[i].delay||100);
-        const spent=performance.now()-started;
-        await new Promise(resolve=>{
-          animationTimer=setTimeout(resolve,Math.max(0,delay-spent));
-        });
-        index++;
-      }
-    }finally{
-      previewBusy=false;
-    }
+    const processed=await tool.renderFrame(source.canvas,index,state.count);
+    return {canvas:processed,delay:source.delay};
   }
 
   function stopPreview(){
@@ -263,69 +244,49 @@
     previewBusy=false;
   }
 
+  async function previewLoop(myGeneration,startIndex){
+    if(previewBusy)return;
+    previewBusy=true;
+    let index=startIndex;
+    try{
+      while(state&&state.generation===myGeneration&&!state.exporting){
+        const started=performance.now();
+        const frame=await processOne(index);
+        if(!state||state.generation!==myGeneration)return;
+        showFrame(frame.canvas);
+        state.previewIndex=(index+1)%state.count;
+        const delay=Math.max(20,frame.delay||100);
+        const spent=performance.now()-started;
+        await new Promise(resolve=>{
+          animationTimer=setTimeout(resolve,Math.max(0,delay-spent));
+        });
+        index=(index+1)%state.count;
+      }
+    }finally{
+      previewBusy=false;
+    }
+  }
+
   async function refreshPreview(){
-    if(!state||!state.readySources)return;
+    if(!state||!state.readySources||state.exporting)return;
     stopPreview();
     const myGeneration=state.generation;
     try{
-      const index=state.previewIndex%state.sources.length;
+      const index=state.previewIndex%state.count;
       const frame=await processOne(index);
       if(!state||state.generation!==myGeneration)return;
-      showFrame(frame);
+      showFrame(frame.canvas);
       if(tool.fileName)tool.fileName.textContent=state.file.name+" · parámetro aplicado";
-      previewLoop(myGeneration,(index+1)%state.sources.length);
+      previewLoop(myGeneration,(index+1)%state.count);
     }catch(error){
       console.error("NeoGif preview:",error);
     }
   }
 
-  async function startGif(file){
-    stopPreview();
-    generation++;
-    const myGeneration=generation;
-    state={
-      file,
-      generation:myGeneration,
-      sources:[],
-      previewIndex:0,
-      readySources:false,
-      processTimer:0,
-      exporting:false
-    };
-    setupProgress();
-    if(tool.reset)tool.reset.disabled=false;
-    if(tool.download){
-      tool.download.disabled=true;
-      tool.download.textContent="CARGANDO GIF…";
-    }
-    setProgress(1,file.name+" · cargando GIF…");
-
-    try{
-      state.sources=await decode(file,tool.gifMaxSide||GIF_MAX_SIDE_DEFAULT);
-      if(!state||state.generation!==myGeneration)return;
-      if(!state.sources.length)throw new Error("Sin frames.");
-      state.readySources=true;
-      state.previewIndex=0;
-      setProgress(0,file.name+" · GIF cargado");
-      if(tool.download){
-        tool.download.disabled=false;
-        tool.download.textContent="DESCARGAR GIF ↓";
-      }
-      const first=await processOne(0);
-      if(!state||state.generation!==myGeneration)return;
-      showFrame(first);
-      state.previewIndex=1%state.sources.length;
-      previewLoop(myGeneration,state.previewIndex);
-    }catch(error){
-      console.error("NeoGif:",error);
-      state=null;
-      setProgress(0,"No se pudo procesar el GIF.");
-      if(tool.download){
-        tool.download.disabled=true;
-        tool.download.textContent=tool.normalDownloadLabel;
-      }
-      alert("No se pudo procesar el GIF.");
-    }
+  function schedulePreview(){
+    if(!state||!state.readySources||state.exporting)return;
+    clearTimeout(state.processTimer);
+    state.processTimer=setTimeout(refreshPreview,100);
   }
 
   function keyTransparentCanvas(source){
@@ -337,9 +298,7 @@
     const data=kctx.getImageData(0,0,keyed.width,keyed.height);
     for(let i=0;i<data.data.length;i+=4){
       if(data.data[i+3]<128){
-        data.data[i]=0;
-        data.data[i+1]=255;
-        data.data[i+2]=0;
+        data.data[i]=0;data.data[i+1]=255;data.data[i+2]=0;
       }
       data.data[i+3]=255;
     }
@@ -354,49 +313,49 @@
     state.exporting=true;
     tool.download.disabled=true;
     tool.download.textContent="PROCESANDO GIF…";
+    setProgress(1,state.file.name+" · preparando GIF…");
 
-    const sources=state.sources;
     let encoder=null;
     try{
-      encoder=null;
-      for(let i=0;i<sources.length;i++){
+      for(let i=0;i<state.count;i++){
         if(!state||state.generation!==myGeneration)return;
         const processed=await processOne(i);
         if(!state||state.generation!==myGeneration)return;
 
         if(!encoder){
           encoder=new GIF({
-            workers:Math.min(2,Math.max(1,navigator.hardwareConcurrency||1)),
-            quality:30,
-            width:processed.width,
-            height:processed.height,
+            workers:1,
+            quality:35,
+            width:processed.canvas.width,
+            height:processed.canvas.height,
             repeat:0,
             workerScript:GIFJS_WORKER,
             dither:false,
             ...(tool.transparent?{transparent:0x00ff00}:{})
           });
-          encoder.on("progress",progress=>{
-            if(state&&state.generation===myGeneration){
-              setProgress(50+progress*50,state.file.name+" · codificando GIF… "+Math.round(progress*100)+"%");
-            }
-          });
         }
 
-        const frameSource=tool.transparent?keyTransparentCanvas(processed):processed;
-        encoder.addFrame(frameSource,{delay:sources[i].delay||100,copy:true});
-        setProgress(((i+1)/sources.length)*50,state.file.name+" · procesando GIF…");
+        const source=tool.transparent?keyTransparentCanvas(processed.canvas):processed.canvas;
+        encoder.addFrame(source,{delay:processed.delay||100,copy:true});
+        setProgress((i+1)/state.count*50,state.file.name+" · preparando GIF…");
         await new Promise(requestAnimationFrame);
       }
 
       if(!encoder)throw new Error("No se generó ningún frame.");
-      if(tool.fileName)tool.fileName.textContent=state.file.name+" · codificando GIF…";
+
+      encoder.on("progress",progress=>{
+        if(state&&state.generation===myGeneration){
+          setProgress(50+progress*50,state.file.name+" · codificando GIF… "+Math.round(progress*100)+"%");
+        }
+      });
+
       const finished=await new Promise((resolve,reject)=>{
         encoder.on("finished",resolve);
-        encoder.on("abort",()=>reject(new Error("La codificación del GIF fue cancelada.")));
+        encoder.on("abort",()=>reject(new Error("La codificación fue cancelada.")));
         encoder.render();
       });
-      if(!state||state.generation!==myGeneration)return;
 
+      if(!state||state.generation!==myGeneration)return;
       const url=URL.createObjectURL(finished);
       const a=document.createElement("a");
       const base=(state.file.name||"imagen.gif").replace(/\.[^.]+$/,"");
@@ -410,32 +369,88 @@
       tool.download.textContent="DESCARGAR GIF ↓";
       state.exporting=false;
     }catch(error){
-      console.error("NeoGif download:",error);
+      console.error("NeoGif:",error);
       if(state&&state.generation===myGeneration){
         state.exporting=false;
-        setProgress(0,state.file.name+" · exportación cancelada");
+        setProgress(0,state.file.name+" · no se pudo generar el GIF");
         tool.download.disabled=false;
         tool.download.textContent="DESCARGAR GIF ↓";
-        alert("No se pudo generar el GIF. Prueba con un GIF más pequeño o con menos resolución.");
+        alert("No se pudo generar el GIF. El archivo puede ser demasiado grande para procesarlo en el navegador.");
       }
     }
   }
 
-  function clearGifState(){
+  async function startGif(file){
     stopPreview();
-    if(state&&state.exporting)state.exporting=false;
+    generation++;
+    const myGeneration=generation;
+    state={
+      file,
+      generation:myGeneration,
+      kind:null,
+      frames:null,
+      decoder:null,
+      count:0,
+      width:0,
+      height:0,
+      durationCache:null,
+      previewIndex:0,
+      readySources:false,
+      exporting:false,
+      processTimer:0
+    };
+    setupProgress();
+    if(tool.reset)tool.reset.disabled=false;
+    tool.download.disabled=true;
+    tool.download.textContent="CARGANDO GIF…";
+    setProgress(1,file.name+" · cargando GIF…");
+
+    try{
+      const opened=await openGif(file,tool.gifMaxSide||GIF_MAX_SIDE_DEFAULT);
+      if(!state||state.generation!==myGeneration)return;
+      state.kind=opened.kind;
+      state.width=opened.width;
+      state.height=opened.height;
+      if(opened.kind==="frames"){
+        state.frames=opened.frames;
+        state.count=opened.frames.length;
+        state.durationCache=new Map();
+      }else{
+        state.decoder=opened.decoder;
+        state.count=opened.count;
+        state.durationCache=opened.durationCache;
+      }
+      if(!state.count)throw new Error("Sin frames.");
+      state.readySources=true;
+      tool.download.disabled=false;
+      tool.download.textContent="DESCARGAR GIF ↓";
+      setProgress(0,file.name+" · GIF cargado");
+      const first=await processOne(0);
+      if(!state||state.generation!==myGeneration)return;
+      showFrame(first.canvas);
+      state.previewIndex=1%state.count;
+      previewLoop(myGeneration,state.previewIndex);
+    }catch(error){
+      console.error("NeoGif:",error);
+      if(state&&state.decoder&&state.decoder.close)state.decoder.close();
+      state=null;
+      setProgress(0,"No se pudo procesar el GIF.");
+      tool.download.disabled=true;
+      tool.download.textContent=tool.normalDownloadLabel;
+      alert("No se pudo procesar el GIF.");
+    }
+  }
+
+  function clearGifState(){
+    if(state&&state.decoder&&state.decoder.close)state.decoder.close();
+    if(state&&state.processTimer)clearTimeout(state.processTimer);
+    stopPreview();
     state=null;
     setProgress(0);
     if(tool){
       tool.download.textContent=tool.normalDownloadLabel;
       tool.download.disabled=true;
     }
-  }
-
-  function schedulePreview(){
-    if(!state||!state.readySources||state.exporting)return;
-    clearTimeout(state.processTimer);
-    state.processTimer=setTimeout(()=>refreshPreview(),100);
   }
 
   function register(config){
@@ -475,6 +490,7 @@
 
     tool.reset.addEventListener("click",()=>{
       generation++;
+      if(state&&state.decoder&&state.decoder.close)state.decoder.close();
       stopPreview();
       state=null;
       setProgress(0);
@@ -494,5 +510,5 @@
     },true);
   }
 
-  window.NeoGif={register};
+  window.NeoGif={register,processJpegFrame};
 })();
