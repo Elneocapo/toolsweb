@@ -344,7 +344,7 @@
             repeat:0,
             workerScript:GIFJS_WORKER,
             dither:false,
-            ...(tool.transparent?{transparent:0x010101}:{})
+            ...(tool.transparent?{transparent:1}:{})
           });
         }
 
