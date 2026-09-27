@@ -345,9 +345,10 @@ async function renderNeoGifJpegFrame(frame){
   });
 }
 
+const neoGifJpegConfig={fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,blockSize,compression,acGain};
 window.NeoGif.register({
   fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,maxSide:MAX_SIDE,gifMaxSide:640,
   async renderFrame(frame){
-    return window.NeoGif.processJpegFrame({fileInput,dropZone,download,reset,canvas,ctx,placeholder,fileName,blockSize,compression,acGain},frame);
+    return window.NeoGif.processJpegFrame(neoGifJpegConfig,frame);
   }
 });
