@@ -41,11 +41,13 @@ function stretchToRatio(ratio){
     x=100;
     y=100;
   }else if(ratio>currentRatio){
-    x=100;
-    y=(sourceWidth/ratio/sourceHeight)*100;
-  }else{
+    // The target is wider: keep the original height and stretch X.
     x=(sourceHeight*ratio/sourceWidth)*100;
     y=100;
+  }else{
+    // The target is taller: keep the original width and stretch Y.
+    x=100;
+    y=(sourceWidth/ratio/sourceHeight)*100;
   }
 
   // Only stretching is allowed. Never shrink below 100%.
