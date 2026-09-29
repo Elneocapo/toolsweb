@@ -16,10 +16,46 @@ let sourceWidth=0;
 let sourceHeight=0;
 let objectUrl=null;
 let loadedFile=null;
+const ratioButtons=[...document.querySelectorAll(".ratio-button")];
 
 function updateLabels(){
   xValue.textContent=Number(stretchX.value)+"%";
   yValue.textContent=Number(stretchY.value)+"%";
+}
+
+function setActiveRatio(ratio){
+  ratioButtons.forEach(button=>{
+    button.classList.toggle("active",Number(button.dataset.ratio)===ratio);
+  });
+}
+
+function stretchToRatio(ratio){
+  if(!sourceCanvas)return;
+
+  const currentRatio=sourceWidth/sourceHeight;
+  let x=100;
+  let y=100;
+
+  // Keep at least one original dimension unchanged and stretch the other.
+  if(Math.abs(currentRatio-ratio)<0.000001){
+    x=100;
+    y=100;
+  }else if(ratio>currentRatio){
+    x=100;
+    y=(sourceWidth/ratio/sourceHeight)*100;
+  }else{
+    x=(sourceHeight*ratio/sourceWidth)*100;
+    y=100;
+  }
+
+  // Only stretching is allowed. Never shrink below 100%.
+  x=Math.max(100,x);
+  y=Math.max(100,y);
+
+  stretchX.value=Math.max(Number(stretchX.min),Math.min(Number(stretchX.max),Math.round(x*100)/100));
+  stretchY.value=Math.max(Number(stretchY.min),Math.min(Number(stretchY.max),Math.round(y*100)/100));
+  setActiveRatio(ratio);
+  render();
 }
 
 function render(){
@@ -73,6 +109,7 @@ function loadFile(file){
 
     stretchX.value=100;
     stretchY.value=100;
+    setActiveRatio(1);
     render();
   };
 
@@ -91,6 +128,10 @@ fileInput.addEventListener("change",()=>{
 });
 
 [stretchX,stretchY].forEach(input=>input.addEventListener("input",render));
+
+ratioButtons.forEach(button=>{
+  button.addEventListener("click",()=>stretchToRatio(Number(button.dataset.ratio)));
+});
 
 ["dragenter","dragover"].forEach(name=>{
   dropZone.addEventListener(name,event=>{
@@ -159,6 +200,7 @@ reset.addEventListener("click",()=>{
   reset.disabled=true;
   stretchX.value=100;
   stretchY.value=100;
+  setActiveRatio(1);
   updateLabels();
   fileName.textContent="Ninguna imagen seleccionada · La imagen completa siempre se conserva.";
 });
