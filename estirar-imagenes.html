@@ -24,7 +24,7 @@
 .label{display:flex;justify-content:space-between;color:var(--muted);font-size:9px;font-weight:800;letter-spacing:1px;margin-bottom:7px}
 .value{color:var(--text)}
 input[type=range]{width:100%;accent-color:#C38D94}
-.dimension-note{margin-top:5px;color:#8f6871;font-size:8px;letter-spacing:.5px}
+.dimension-note{margin-top:5px;color:#8f6871;font-size:8px;letter-spacing:.5px}.ratio-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px}.ratio-button{border:1px solid var(--border);background:transparent;color:var(--muted);padding:8px 4px;font:800 8px Inter,sans-serif;letter-spacing:.5px;cursor:pointer}.ratio-button:hover,.ratio-button.active{background:#F5E9E9;color:#170F15;border-color:#F5E9E9}
 .actions{display:flex;gap:7px}
 .button{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:10px 13px;font:700 9px Inter,sans-serif;letter-spacing:1px;cursor:pointer}
 .button.primary{background:#F5E9E9;color:#170F15;border-color:#F5E9E9}
@@ -38,7 +38,7 @@ input[type=range]{width:100%;accent-color:#C38D94}
 .preview{height:35vh;min-height:200px}
 .controls{grid-template-columns:1fr}
 .actions{width:100%}
-.button{flex:1}
+.button{flex:1}.ratio-grid{grid-template-columns:repeat(4,1fr)}
 .drop-inner strong{display:block;margin:0 0 4px}
 }
 </style>
@@ -57,6 +57,20 @@ input[type=range]{width:100%;accent-color:#C38D94}
 <div class="preview"><div class="placeholder" id="placeholder">LA VISTA PREVIA APARECERÁ AQUÍ</div><canvas id="canvas" hidden></canvas></div>
 <div class="controls">
 <div class="control-stack">
+<div>
+<div class="label"><span>PROPORCIONES</span><span class="value">ESTIRADO AUTOMÁTICO</span></div>
+<div class="ratio-grid">
+<button type="button" class="ratio-button active" data-ratio="1">1:1</button>
+<button type="button" class="ratio-button" data-ratio="1.3333333333">4:3</button>
+<button type="button" class="ratio-button" data-ratio="1.5">3:2</button>
+<button type="button" class="ratio-button" data-ratio="1.7777777778">16:9</button>
+<button type="button" class="ratio-button" data-ratio="2.3333333333">21:9</button>
+<button type="button" class="ratio-button" data-ratio="0.75">3:4</button>
+<button type="button" class="ratio-button" data-ratio="0.6666666667">2:3</button>
+<button type="button" class="ratio-button" data-ratio="0.5625">9:16</button>
+</div>
+<div class="dimension-note">La proporción se consigue estirando uno de los ejes. Nunca se recorta ni se reduce.</div>
+</div>
 <div>
 <div class="label"><span>ESTIRAR X</span><span id="xValue" class="value">100%</span></div>
 <input id="stretchX" type="range" min="100" max="300" value="100">
