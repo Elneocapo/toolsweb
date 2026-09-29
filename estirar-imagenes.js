@@ -25,41 +25,51 @@ function updateLabels(){
 
 function setActiveRatio(ratio){
   ratioButtons.forEach(button=>{
-    button.classList.toggle("active",Number(button.dataset.ratio)===ratio);
+    button.classList.toggle(
+      "active",
+      ratio!==null && Number(button.dataset.ratio)===Number(ratio)
+    );
   });
 }
 
 function stretchToRatio(ratio){
-  if(!sourceCanvas)return;
+  if(!sourceCanvas){
+    setActiveRatio(null);
+    fileName.textContent="Sube una imagen primero para aplicar una proporción.";
+    return;
+  }
 
+  const targetRatio=Number(ratio);
   const currentRatio=sourceWidth/sourceHeight;
   let x=100;
   let y=100;
 
-  // Keep at least one original dimension unchanged and stretch the other.
-  if(Math.abs(currentRatio-ratio)<0.000001){
-    x=100;
-    y=100;
-  }else if(ratio>currentRatio){
-    // The target is wider: keep the original height and stretch X.
-    x=(sourceHeight*ratio/sourceWidth)*100;
-    y=100;
-  }else{
-    // The target is taller: keep the original width and stretch Y.
-    x=100;
-    y=(sourceWidth/ratio/sourceHeight)*100;
+  if(Math.abs(currentRatio-targetRatio)>0.000001){
+    if(targetRatio>currentRatio){
+      // Wider target: keep the full original height and stretch the width.
+      x=(sourceHeight*targetRatio/sourceWidth)*100;
+    }else{
+      // Taller target: keep the full original width and stretch the height.
+      y=(sourceWidth/targetRatio/sourceHeight)*100;
+    }
   }
 
-  // Only stretching is allowed. Never shrink below 100%.
-  x=Math.max(100,x);
-  y=Math.max(100,y);
+  // This tool only stretches; it never shrinks an axis below 100%.
+  x=Math.max(100,Math.round(x*100)/100);
+  y=Math.max(100,Math.round(y*100)/100);
 
-  stretchX.value=Math.max(Number(stretchX.min),Math.min(Number(stretchX.max),Math.round(x*100)/100));
-  stretchY.value=Math.max(Number(stretchY.min),Math.min(Number(stretchY.max),Math.round(y*100)/100));
-  setActiveRatio(ratio);
+  const maxX=Number(stretchX.max);
+  const maxY=Number(stretchY.max);
+  if(x>maxX||y>maxY){
+    fileName.textContent="Esta proporción necesita más de "+maxX+"% de estiramiento en un eje.";
+    return;
+  }
+
+  stretchX.value=String(x);
+  stretchY.value=String(y);
+  setActiveRatio(targetRatio);
   render();
 }
-
 function render(){
   if(!sourceCanvas)return;
 
@@ -111,7 +121,7 @@ function loadFile(file){
 
     stretchX.value=100;
     stretchY.value=100;
-    setActiveRatio(1);
+    setActiveRatio(null);
     render();
   };
 
@@ -132,7 +142,11 @@ fileInput.addEventListener("change",()=>{
 [stretchX,stretchY].forEach(input=>input.addEventListener("input",render));
 
 ratioButtons.forEach(button=>{
-  button.addEventListener("click",()=>stretchToRatio(Number(button.dataset.ratio)));
+  button.addEventListener("click",event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    stretchToRatio(Number(button.dataset.ratio));
+  });
 });
 
 ["dragenter","dragover"].forEach(name=>{
@@ -202,7 +216,7 @@ reset.addEventListener("click",()=>{
   reset.disabled=true;
   stretchX.value=100;
   stretchY.value=100;
-  setActiveRatio(1);
+  setActiveRatio(null);
   updateLabels();
   fileName.textContent="Ninguna imagen seleccionada · La imagen completa siempre se conserva.";
 });
